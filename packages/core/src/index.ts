@@ -9,7 +9,7 @@ export { ExecutionError } from './types/errors';
 export type { ValidationIssue } from './types/errors';
 
 // Interfaces
-export type { StateStore } from './interfaces/state-store';
+export type { StateStore, Lock } from './interfaces/state-store';
 export type { StepHandler, HandlerParams } from './interfaces/step-handler';
 export type { HandlerRegistry } from './interfaces/handler-registry';
 export type { FlowRegistry } from './interfaces/flow-registry';

@@ -9,6 +9,12 @@ export interface StepHandler {
   /** Unique type identifier (e.g., "http", "delay") */
   readonly type: string;
 
+  /**
+   * Whether this handler is stateful (runs as a job).
+   * Default: false (stateless, runs inline)
+   */
+  readonly stateful?: boolean;
+
   /** Execute the step */
   execute(params: HandlerParams): Promise<StepResult>;
 }

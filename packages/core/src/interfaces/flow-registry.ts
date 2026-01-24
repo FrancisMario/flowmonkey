@@ -17,6 +17,9 @@ export interface FlowRegistry {
   /** List all flow IDs */
   flowIds(): string[];
 
+  /** Get all versions of a flow, newest first */
+  versions(id: string): string[];
+
   /** Validate without registering */
   validate(flow: Flow): ValidationIssue[];
 }

@@ -46,6 +46,12 @@ export class DefaultFlowRegistry implements FlowRegistry {
     return [...this.flows.keys()];
   }
 
+  versions(id: string): string[] {
+    const versions = this.flows.get(id);
+    if (!versions) return [];
+    return [...versions.keys()].sort().reverse();
+  }
+
   validate(flow: Flow): ValidationIssue[] {
     return validateFlow(flow);
   }
