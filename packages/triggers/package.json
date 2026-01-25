@@ -13,12 +13,31 @@
   },
   "scripts": {
     "build": "tsup",
-    "test": "vitest"
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@flowmonkey/core": "workspace:*"
+    "@flowmonkey/core": "workspace:*",
+    "ajv": "^8.12.0",
+    "ajv-formats": "^2.1.1",
+    "cron-parser": "^4.9.0"
   },
   "devDependencies": {
-    "tsup": "^8.0.0"
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0"
+  },
+  "peerDependencies": {
+    "pg": "^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "pg": {
+      "optional": true
+    }
   }
 }

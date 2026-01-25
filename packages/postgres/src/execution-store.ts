@@ -65,7 +65,7 @@ export class PgExecutionStore implements StateStore {
        ORDER BY wake_at ASC LIMIT $2`,
       [now, limit]
     );
-    return rows.map(r => r.id);
+    return rows.map((r: { id: any; }) => r.id);
   }
 
   async listByStatus(status: ExecutionStatus, limit = 100): Promise<Execution[]> {
@@ -75,7 +75,7 @@ export class PgExecutionStore implements StateStore {
        ORDER BY created_at DESC LIMIT $2`,
       [status, limit]
     );
-    return rows.map(r => this.toExecution(r));
+    return rows.map((r: any) => this.toExecution(r));
   }
 
   async acquireLock(id: string, ttlMs: number): Promise<Lock | null> {

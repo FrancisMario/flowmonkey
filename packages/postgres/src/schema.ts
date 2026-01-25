@@ -1,3 +1,5 @@
+import type { Pool } from 'pg';
+
 export const SCHEMA_VERSION = '0.0.1';
 
 export const schema = `
@@ -96,6 +98,6 @@ CREATE INDEX IF NOT EXISTS idx_fm_locks_expires ON fm_locks(expires_at);
 /**
  * Apply schema to database.
  */
-export async function applySchema(pool: import('pg').Pool): Promise<void> {
+export async function applySchema(pool: Pool): Promise<void> {
   await pool.query(schema);
 }

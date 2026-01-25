@@ -13,12 +13,19 @@
   },
   "scripts": {
     "build": "tsup",
-    "test": "vitest"
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
   },
   "dependencies": {
     "@flowmonkey/core": "workspace:*"
   },
   "devDependencies": {
-    "tsup": "^8.0.0"
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0"
   }
 }

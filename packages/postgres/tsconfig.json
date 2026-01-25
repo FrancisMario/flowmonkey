@@ -2,7 +2,9 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "moduleResolution": "Bundler",
+    "types": ["pg", "node"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

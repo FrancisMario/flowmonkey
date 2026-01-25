@@ -190,7 +190,7 @@ export class PgJobStore implements JobStore {
        LIMIT $2`,
       [now, limit]
     );
-    return rows.map(r => this.toJob(r));
+    return rows.map((r: any) => this.toJob(r));
   }
 
   async resetStalled(jobId: string): Promise<boolean> {
@@ -214,7 +214,7 @@ export class PgJobStore implements JobStore {
       `SELECT * FROM fm_jobs WHERE status = $1 ORDER BY created_at DESC LIMIT $2`,
       [status, limit]
     );
-    return rows.map(r => this.toJob(r));
+    return rows.map((r: any) => this.toJob(r));
   }
 
   async listForExecution(executionId: string): Promise<Job[]> {
@@ -222,7 +222,7 @@ export class PgJobStore implements JobStore {
       `SELECT * FROM fm_jobs WHERE execution_id = $1 ORDER BY created_at ASC`,
       [executionId]
     );
-    return rows.map(r => this.toJob(r));
+    return rows.map((r: any) => this.toJob(r));
   }
 
   /**

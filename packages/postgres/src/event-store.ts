@@ -91,7 +91,7 @@ export class PgEventStore implements EventBus {
       params
     );
 
-    return rows.map(r => this.toEvent(r));
+    return rows.map((r: any) => this.toEvent(r));
   }
 
   async forExecution(executionId: string): Promise<StoredEvent[]> {
@@ -103,7 +103,7 @@ export class PgEventStore implements EventBus {
       `SELECT * FROM fm_events WHERE type = $1 ORDER BY timestamp DESC LIMIT $2`,
       [type, limit]
     );
-    return rows.map(r => this.toEvent(r));
+    return rows.map((r: any) => this.toEvent(r));
   }
 
   // --- Internal ---

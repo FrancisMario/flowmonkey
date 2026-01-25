@@ -1,7 +1,13 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "./dist"
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "baseUrl": ".",
+    "paths": {
+      "@flowmonkey/core": ["../core/dist/index.d.ts"],
+      "@flowmonkey/core/*": ["../core/dist/*"]
+    }
   },
   "include": ["src"]
 }

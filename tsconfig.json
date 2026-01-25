@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "noEmit": true,
+    "paths": {
+      "@flowmonkey/core": ["packages/core/src/index.ts"],
+      "@flowmonkey/core/*": ["packages/core/src/*"],
+      "@flowmonkey/handlers": ["packages/handlers/src/index.ts"],
+      "@flowmonkey/jobs": ["packages/jobs/src/index.ts"],
+      "@flowmonkey/postgres": ["packages/postgres/src/index.ts"],
+      "@flowmonkey/redis": ["packages/redis/src/index.ts"],
+      "@flowmonkey/triggers": ["packages/triggers/src/index.ts"]
+    }
+  },
+  "include": ["packages/*/src/**/*"],
+  "exclude": ["**/node_modules", "**/dist"]
+}
