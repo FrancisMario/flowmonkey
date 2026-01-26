@@ -103,6 +103,19 @@ export class BasicJobRunner implements JobRunner {
         throw new Error(`Execution ${job.executionId} not found`);
       }
 
+      // Create mock context helpers (no storage backend for jobs)
+      const ctx = {
+        get: async (key: string) => exec.context[key],
+        set: async (key: string, value: unknown) => { exec.context[key] = value; },
+        has: (key: string) => key in exec.context,
+        delete: async (key: string) => { delete exec.context[key]; },
+        getAll: async <T = Record<string, unknown>>(keys: string[]): Promise<T> => {
+          const result: Record<string, unknown> = {};
+          for (const key of keys) result[key] = exec.context[key];
+          return result as T;
+        },
+      };
+
       const params: HandlerParams = {
         input: job.input,
         step: {
@@ -113,11 +126,8 @@ export class BasicJobRunner implements JobRunner {
           transitions: { onSuccess: 'next' },
         },
         context: exec.context ?? {},
-        execution: {
-          id: job.executionId,
-          flowId: exec.flowId,
-          stepCount: exec.stepCount,
-        },
+        ctx,
+        execution: exec,
       };
 
       const result = await handler.execute(params);

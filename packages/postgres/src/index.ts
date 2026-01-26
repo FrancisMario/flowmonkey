@@ -18,5 +18,8 @@ export {
   type EventQuery,
 } from './event-store';
 
+export { PgContextStorage } from './context-storage';
+export { PgResumeTokenManager } from './resume-token-manager';
+
 // Factory
 export { createPgStores, type PgStores } from './factory';

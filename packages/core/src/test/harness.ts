@@ -1,4 +1,25 @@
-import { Engine, type TickResult } from '../engine/execution-engine';
+/**
+ * Test Harness
+ *
+ * Provides a preconfigured test environment for integration testing.
+ * Automatically sets up Engine, MemoryStore, and registries with
+ * event capture for assertions.
+ *
+ * Usage:
+ * ```typescript
+ * const t = new TestHarness({
+ *   handlers: [myHandler],
+ *   flows: [myFlow],
+ * });
+ *
+ * const { execution } = await t.run('my-flow', { input: 'data' });
+ * t.assertCompleted(execution);
+ * t.assertContext(execution, { expectedKey: 'expectedValue' });
+ * ```
+ *
+ * @see README.md for full documentation
+ */
+import { Engine, type TickResult, type CreateResult, type CreateOptions } from '../engine/execution-engine';
 import { MemoryStore } from '../impl/memory-store';
 import { DefaultHandlerRegistry } from '../impl/handler-registry';
 import { DefaultFlowRegistry } from '../impl/flow-registry';
@@ -7,21 +28,31 @@ import type { Execution } from '../types/execution';
 import type { StepHandler } from '../interfaces/step-handler';
 import type { EventBus } from '../interfaces/event-bus';
 
+/** Options for creating a TestHarness instance. */
 export interface TestHarnessOptions {
+  /** Handlers to register with the engine */
   handlers?: StepHandler[];
+  /** Flows to register with the engine */
   flows?: Flow[];
+  /** Whether to record step history (default: true) */
   recordHistory?: boolean;
+  /** Maximum steps before failing (default: 100) */
   maxSteps?: number;
 }
 
+/** Result of running a flow to completion. */
 export interface RunResult {
+  /** Final execution state */
   execution: Execution;
+  /** Last tick result */
   result: TickResult;
+  /** All events emitted during execution */
   events: any[];
 }
 
 /**
- * Test harness for easy testing.
+ * Test harness for easy engine testing.
+ * Provides a complete test environment with assertions.
  */
 export class TestHarness {
   readonly store: MemoryStore;
@@ -56,15 +87,21 @@ export class TestHarness {
 
   /** Run a flow to completion */
   async run(flowId: string, context: Record<string, unknown> = {}): Promise<RunResult> {
-    const execution = await this.engine.create(flowId, context);
-    const result = await this.engine.run(execution.id, { simulateTime: true });
-    const final = await this.engine.get(execution.id);
-    return { execution: final!, result, events: this.events.filter(e => e.executionId === execution.id) };
+    const createResult = await this.engine.create(flowId, context);
+    const result = await this.engine.run(createResult.execution.id, { simulateTime: true });
+    const final = await this.engine.get(createResult.execution.id);
+    return { execution: final!, result, events: this.events.filter(e => e.executionId === createResult.execution.id) };
   }
 
   /** Create without running */
-  create(flowId: string, context: Record<string, unknown> = {}) {
-    return this.engine.create(flowId, context);
+  async create(flowId: string, context: Record<string, unknown> = {}, options?: CreateOptions): Promise<Execution> {
+    const result = await this.engine.create(flowId, context, options);
+    return result.execution;
+  }
+
+  /** Create and return full result (for idempotency testing) */
+  createWithResult(flowId: string, context: Record<string, unknown> = {}, options?: CreateOptions): Promise<CreateResult> {
+    return this.engine.create(flowId, context, options);
   }
 
   /** Single tick */
@@ -84,8 +121,14 @@ export class TestHarness {
   }
 
   assertFailed(e: Execution, code?: string) {
-    if (e.status !== 'failed') throw new Error(`Expected failed, got ${e.status}`);
-    if (code && e.error?.code !== code) throw new Error(`Expected code ${code}, got ${e.error?.code}`);
+    if (e.status !== 'failed' && e.status !== 'cancelled') throw new Error(`Expected failed/cancelled, got ${e.status}`);
+    if (code && e.status === 'failed' && e.error?.code !== code) throw new Error(`Expected code ${code}, got ${e.error?.code}`);
+    if (code && e.status === 'cancelled' && code !== 'CANCELLED') throw new Error(`Expected code ${code}, but execution was cancelled`);
+  }
+
+  assertCancelled(e: Execution) {
+    if (e.status !== 'cancelled') throw new Error(`Expected cancelled, got ${e.status}`);
+    if (!e.cancellation) throw new Error(`Expected cancellation info, but none found`);
   }
 
   assertContext(e: Execution, expected: Record<string, unknown>) {

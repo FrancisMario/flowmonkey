@@ -26,4 +26,54 @@ export class DefaultHandlerRegistry implements HandlerRegistry {
   types(): string[] {
     return [...this.handlers.keys()];
   }
+
+  unregister(type: string): boolean {
+    const h = this.handlers.get(type);
+    if (h?.cleanup) {
+      h.cleanup().catch(() => undefined);
+    }
+    return this.handlers.delete(type);
+  }
+
+  getMetadata(type: string) {
+    return this.handlers.get(type)?.metadata;
+  }
+
+  getAllMetadata() {
+    return Array.from(this.handlers.values()).map(h => h.metadata);
+  }
+
+  listByCategory(category?: string) {
+    if (!category) return this.getAllMetadata();
+    return this.getAllMetadata().filter(m => m.category === category);
+  }
+
+  getStateful() {
+    return this.getAllMetadata().filter(m => m.stateful);
+  }
+
+  getStateless() {
+    return this.getAllMetadata().filter(m => !m.stateful);
+  }
+
+  exportManifest() {
+    const handlers = this.getAllMetadata();
+    const categories: Record<string, typeof handlers> = {};
+    for (const h of handlers) {
+      const cat = h.category || 'uncategorized';
+      if (!categories[cat]) categories[cat] = [];
+      categories[cat].push(h);
+    }
+
+    return { version: '1.0.0', handlers, categories };
+  }
+
+  search(query: string) {
+    const q = query.toLowerCase();
+    return this.getAllMetadata().filter(m =>
+      m.name.toLowerCase().includes(q) ||
+      (m.description || '').toLowerCase().includes(q) ||
+      (m.visual?.tags || []).some(t => t.toLowerCase().includes(q))
+    );
+  }
 }

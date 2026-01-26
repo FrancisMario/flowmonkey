@@ -117,16 +117,17 @@ export async function handleTrigger(
   try {
     const context = { [trigger.contextKey]: body };
 
-    const execution = await deps.engine.create(trigger.flowId, context);
+    const result = await deps.engine.create(trigger.flowId, context);
+    const executionId = result.execution.id;
 
     // Signal worker if available
     if (deps.signals) {
-      await deps.signals.signal(execution.id);
+      await deps.signals.signal(executionId);
     }
 
     await deps.triggerStore.logInvocation({
       triggerId,
-      executionId: execution.id,
+      executionId,
       status: 'success',
       requestBody: body,
       requestIp: meta.ip,
@@ -134,7 +135,7 @@ export async function handleTrigger(
       timestamp: Date.now(),
     });
 
-    return { status: 201, body: { executionId: execution.id } };
+    return { status: 201, body: { executionId } };
   } catch (err) {
     await deps.triggerStore.logInvocation({
       triggerId,

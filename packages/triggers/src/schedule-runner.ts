@@ -119,16 +119,17 @@ export class ScheduleRunner {
 
     try {
       // Create execution with static context
-      const execution = await this.deps.engine.create(trigger.flowId, trigger.staticContext);
+      const result = await this.deps.engine.create(trigger.flowId, trigger.staticContext);
+      const executionId = result.execution.id;
 
       // Signal worker if available
       if (this.deps.signals) {
-        await this.deps.signals.signal(execution.id);
+        await this.deps.signals.signal(executionId);
       }
 
       await this.deps.triggerStore.logInvocation({
         triggerId: trigger.id,
-        executionId: execution.id,
+        executionId,
         status: 'success',
         durationMs: Date.now() - startTime,
         timestamp: now,

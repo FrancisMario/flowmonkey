@@ -5,6 +5,14 @@ import type { StepHandler, HandlerParams } from '@flowmonkey/core';
  */
 export const httpHandler: StepHandler = {
   type: 'http',
+  metadata: {
+    type: 'http',
+    name: 'HTTP Request',
+    description: 'Make HTTP requests',
+    category: 'external',
+    stateful: false,
+    configSchema: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] },
+  },
   async execute(params: HandlerParams) {
     const input = params.input as {
       method?: string;
@@ -55,6 +63,14 @@ export const httpHandler: StepHandler = {
  */
 export const delayHandler: StepHandler = {
   type: 'delay',
+  metadata: {
+    type: 'delay',
+    name: 'Delay',
+    description: 'Delay for a given duration',
+    category: 'utility',
+    stateful: false,
+    configSchema: { type: 'object' },
+  },
   async execute(params: HandlerParams) {
     const input = params.input as { ms: number };
     const delay = Number(input.ms) || 1000;
@@ -73,6 +89,14 @@ export const delayHandler: StepHandler = {
  */
 export const llmHandler: StepHandler = {
   type: 'llm',
+  metadata: {
+    type: 'llm',
+    name: 'LLM',
+    description: 'Language model invocation (stub)',
+    category: 'ai',
+    stateful: false,
+    configSchema: { type: 'object' },
+  },
   async execute(params: HandlerParams) {
     const input = params.input as {
       model?: string;
@@ -101,6 +125,14 @@ export const llmHandler: StepHandler = {
  */
 export const webhookHandler: StepHandler = {
   type: 'webhook',
+  metadata: {
+    type: 'webhook',
+    name: 'Webhook',
+    description: 'Send webhook events',
+    category: 'external',
+    stateful: false,
+    configSchema: { type: 'object' },
+  },
   async execute(params: HandlerParams) {
     const input = params.input as {
       url: string;

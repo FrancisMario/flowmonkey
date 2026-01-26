@@ -1,9 +1,15 @@
 ## FlowMonkey — Quick orientation for coding agents
 
-This repo is a small workflow engine split into focused packages. Aim to make minimal, safe changes and follow existing conventions shown in tests and harnesses.
+FlowMonkey is a minimal, production-ready workflow execution engine for TypeScript/Node.js. The repo is split into focused packages. Aim to make minimal, safe changes and follow existing conventions shown in tests and harnesses.
 
-- Workspace: root manages packages with pnpm (pnpm-workspace.yaml).
-- Node: requires Node >= 20 (see root `package.json`).
+**Documentation:**
+- [README.md](../../README.md) — Overview, quick start, and usage examples
+- [docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md) — Production deployment guide
+- [CONTRIBUTING.md](../../CONTRIBUTING.md) — Contribution guidelines
+
+**Workspace:**
+- Root manages packages with pnpm (pnpm-workspace.yaml)
+- Node: requires Node >= 20 (see root `package.json`)
 
 ### High-level architecture (read before editing core logic)
 - `packages/core` — the engine: types, interfaces, `Engine` (stateless), registries, in-memory store, and a test harness.

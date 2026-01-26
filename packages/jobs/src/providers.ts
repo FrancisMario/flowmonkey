@@ -26,6 +26,7 @@ export class InProcessJobProvider implements JobProvider {
   createHandler(): StepHandler {
     return {
       type: 'job',
+      metadata: { type: 'job', name: 'Job', configSchema: { type: 'object' } },
       stateful: true,
       async execute(params: HandlerParams) {
         const { job } = params.input as {
@@ -53,6 +54,7 @@ export class ExternalJobProvider implements JobProvider {
     const endpoint = this.endpoint;
     return {
       type: 'external-job',
+      metadata: { type: 'external-job', name: 'External Job', configSchema: { type: 'object' } },
       stateful: true,
       async execute(params: HandlerParams) {
         const { handler, input } = params.input as { handler: string; input: unknown };

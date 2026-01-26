@@ -35,4 +35,31 @@ export interface StateStore {
    * @returns Lock if acquired, null if already locked
    */
   acquireLock?(id: string, ttlMs: number): Promise<Lock | null>;
+
+  // === V1 Gap Fixes ===
+
+  /**
+   * Find execution by idempotency key within window.
+   * Returns null if not found or if the key has expired.
+   */
+  findByIdempotencyKey?(
+    flowId: string,
+    key: string,
+    windowMs: number
+  ): Promise<Execution | null>;
+
+  /**
+   * Find child executions (sub-flows) of a parent.
+   */
+  findChildren?(parentId: string): Promise<Execution[]>;
+
+  /**
+   * Find executions that have exceeded their execution timeout.
+   */
+  findTimedOutExecutions?(now: number): Promise<Execution[]>;
+
+  /**
+   * Find executions in waiting status that have exceeded their wait timeout.
+   */
+  findTimedOutWaits?(now: number): Promise<Execution[]>;
 }

@@ -1,5 +1,25 @@
+/**
+ * Test Flows
+ *
+ * Predefined flow definitions for testing the execution engine.
+ * Each flow demonstrates a specific execution pattern.
+ *
+ * Flows:
+ * - simpleFlow: Basic 2-step execution (echo → transform)
+ * - branchFlow: Conditional routing with 4 paths
+ * - waitFlow: Wait/resume pattern (start → wait → finish)
+ * - errorFlow: Error handling with onFailure transition
+ * - infiniteFlow: Infinite loop for max steps testing
+ * - longWaitFlow: Extended wait for cancellation testing
+ *
+ * @see README.md for full documentation
+ */
 import type { Flow } from '../types/flow';
 
+/**
+ * Simple flow: echo input, then transform to uppercase.
+ * Tests basic sequential execution and output storage.
+ */
 export const simpleFlow: Flow = {
   id: 'simple',
   version: '1.0.0',
@@ -97,6 +117,67 @@ export const errorFlow: Flow = {
       config: { value: 'recovered' },
       input: { type: 'static', value: null },
       outputKey: 'result',
+      transitions: { onSuccess: null },
+    },
+  },
+};
+
+/**
+ * Infinite loop flow for testing max steps.
+ */
+export const infiniteFlow: Flow = {
+  id: 'infinite',
+  version: '1.0.0',
+  initialStepId: 'step1',
+  steps: {
+    step1: {
+      id: 'step1',
+      type: 'echo',
+      config: {},
+      input: { type: 'static', value: 'loop' },
+      outputKey: 'val',
+      transitions: { onSuccess: 'step2' },
+    },
+    step2: {
+      id: 'step2',
+      type: 'echo',
+      config: {},
+      input: { type: 'key', key: 'val' },
+      outputKey: 'val2',
+      transitions: { onSuccess: 'step1' }, // Loop back
+    },
+  },
+};
+
+/**
+ * Long wait flow for testing cancellation.
+ */
+export const longWaitFlow: Flow = {
+  id: 'long-wait',
+  version: '1.0.0',
+  initialStepId: 'start',
+  steps: {
+    start: {
+      id: 'start',
+      type: 'set',
+      config: { value: 'started' },
+      input: { type: 'static', value: null },
+      outputKey: 'status',
+      transitions: { onSuccess: 'wait' },
+    },
+    wait: {
+      id: 'wait',
+      type: 'delay',
+      config: { ms: 60000 },
+      input: { type: 'static', value: null },
+      transitions: { onSuccess: 'done' },
+    },
+    done: {
+      id: 'done',
+      type: 'set',
+      config: { value: 'done' },
+      input: { type: 'static', value: null },
+      outputKey: 'status',
       transitions: { onSuccess: null },
     },
   },

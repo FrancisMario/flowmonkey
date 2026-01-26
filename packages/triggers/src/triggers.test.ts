@@ -285,7 +285,11 @@ describe('handleTrigger', () => {
     })) as HttpTrigger;
 
     mockFlowRegistry.get.mockReturnValue(mockFlow);
-    mockEngine.create.mockResolvedValue({ id: 'exec_abc123' });
+    mockEngine.create.mockResolvedValue({
+      execution: { id: 'exec_abc123' },
+      created: true,
+      idempotencyHit: false,
+    });
   });
 
   it('returns 404 for non-existent trigger', async () => {
@@ -389,7 +393,7 @@ describe('ScheduleRunner', () => {
     store = new MemoryTriggerStore();
     vi.clearAllMocks();
     mockFlowRegistry.get.mockReturnValue(mockFlow);
-    mockEngine.create.mockResolvedValue({ id: 'exec_scheduled' });
+    mockEngine.create.mockResolvedValue({ execution: { id: 'exec_scheduled' }, created: true, idempotencyHit: false });
   });
 
   it('fires due schedule triggers', async () => {
@@ -493,7 +497,7 @@ describe('TriggerService', () => {
     vi.clearAllMocks();
 
     mockFlowRegistry.get.mockReturnValue(mockFlow);
-    mockEngine.create.mockResolvedValue({ id: 'exec_svc' });
+    mockEngine.create.mockResolvedValue({ execution: { id: 'exec_svc' }, created: true, idempotencyHit: false });
 
     service = new TriggerService({
       triggerStore: store,

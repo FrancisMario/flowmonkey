@@ -4,7 +4,7 @@
  */
 export interface StepResult {
   /** What happened */
-  readonly outcome: 'success' | 'failure' | 'wait';
+  readonly outcome: 'success' | 'failure' | 'wait' | 'waiting' | 'waited';
 
   /** Output to store in context */
   readonly output?: unknown;
@@ -17,6 +17,12 @@ export interface StepResult {
 
   /** Why waiting (for wait) */
   readonly waitReason?: string;
+
+  /** Resume token (for waiting) */
+  readonly resumeToken?: string;
+
+  /** Additional wait data */
+  readonly waitData?: Record<string, unknown>;
 
   /** Override default transition */
   readonly nextStepOverride?: string | null;
