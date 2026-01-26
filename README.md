@@ -1,7 +1,7 @@
 # FlowMonkey
 
 <p align="center">
-  <img src="assets/mascot.png" alt="FlowMonkey" width="200" />
+  <img src="assets/mascot.png" alt="FlowMonkey" width="400" />
 </p>
 
 A minimal, production-ready workflow execution engine for TypeScript/Node.js.
