@@ -88,14 +88,16 @@ flows.register(greetingFlow);
 const engine = new Engine(store, handlers, flows);
 
 // 4. Run a flow
-const { execution, created } = await engine.create('greeting', {
+const { execution } = await engine.create('greeting', {
   user: { name: 'World' },
 });
 
-const result = await engine.run(execution.id, { simulateTime: true });
+const result = await engine.run(execution.id);
+console.log(result.status);  // 'completed'
 
-console.log(result.status);               // 'completed'
-console.log(result.context.greeting);     // { message: 'Hello, World!' }
+// Fetch execution to get the context
+const completed = await store.load(execution.id);
+console.log(completed.context.greeting);  // { message: 'Hello, World!' }
 ```
 
 ## Core Concepts
