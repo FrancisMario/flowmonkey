@@ -34,11 +34,10 @@ importers:
         version: 2.1.9(@types/node@20.19.30)
 
   packages/handlers:
-    dependencies:
+    devDependencies:
       '@flowmonkey/core':
         specifier: workspace:*
         version: link:../core
-    devDependencies:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.30
@@ -53,11 +52,10 @@ importers:
         version: 2.1.9(@types/node@20.19.30)
 
   packages/jobs:
-    dependencies:
+    devDependencies:
       '@flowmonkey/core':
         specifier: workspace:*
         version: link:../core
-    devDependencies:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.30
@@ -72,11 +70,10 @@ importers:
         version: 2.1.9(@types/node@20.19.30)
 
   packages/postgres:
-    dependencies:
+    devDependencies:
       '@flowmonkey/core':
         specifier: workspace:*
         version: link:../core
-    devDependencies:
       '@types/node':
         specifier: ^20.19.30
         version: 20.19.30
@@ -97,11 +94,10 @@ importers:
         version: 2.1.9(@types/node@20.19.30)
 
   packages/redis:
-    dependencies:
+    devDependencies:
       '@flowmonkey/core':
         specifier: workspace:*
         version: link:../core
-    devDependencies:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.30
@@ -120,9 +116,6 @@ importers:
 
   packages/triggers:
     dependencies:
-      '@flowmonkey/core':
-        specifier: workspace:*
-        version: link:../core
       ajv:
         specifier: ^8.12.0
         version: 8.17.1
@@ -136,6 +129,9 @@ importers:
         specifier: ^8.0.0
         version: 8.17.2
     devDependencies:
+      '@flowmonkey/core':
+        specifier: workspace:*
+        version: link:../core
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.30

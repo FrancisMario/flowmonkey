@@ -1,6 +1,6 @@
 {
   "name": "@flowmonkey/core",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "FlowMonkey core execution engine",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -45,12 +45,20 @@
     "typescript": "^5.4.0",
     "vitest": "^2.0.0"
   },
-  "peerDependencies": {},
-  "dependencies": {},
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/flowmonkey.git",
+    "url": "https://github.com/flowmonkey/flowmonkey.git",
     "directory": "packages/core"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "workflow",
+    "engine",
+    "state-machine",
+    "orchestration",
+    "typescript"
+  ],
   "license": "MIT"
 }

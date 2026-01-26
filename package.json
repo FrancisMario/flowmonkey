@@ -1,8 +1,14 @@
 {
   "name": "flowmonkey",
   "private": true,
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "Minimal workflow execution engine",
+  "author": "FlowMonkey Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flowmonkey/flowmonkey.git"
+  },
   "scripts": {
     "build": "pnpm -r build",
     "test": "vitest run",
@@ -11,7 +17,12 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "clean": "pnpm -r clean",
-    "dev": "pnpm -r --parallel dev"
+    "dev": "pnpm -r --parallel dev",
+    "release": "pnpm build && pnpm test && pnpm -r publish --access public",
+    "release:dry": "pnpm build && pnpm test && pnpm -r publish --access public --dry-run",
+    "version:patch": "pnpm -r exec -- npm version patch --no-git-tag-version",
+    "version:minor": "pnpm -r exec -- npm version minor --no-git-tag-version",
+    "version:major": "pnpm -r exec -- npm version major --no-git-tag-version"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^2.0.0",

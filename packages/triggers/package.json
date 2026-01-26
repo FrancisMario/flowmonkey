@@ -1,16 +1,26 @@
 {
   "name": "@flowmonkey/triggers",
-  "version": "0.0.1",
+  "version": "1.0.0",
+  "description": "HTTP and cron triggers for FlowMonkey workflows",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     }
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -20,24 +30,41 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@flowmonkey/core": "workspace:*",
     "ajv": "^8.12.0",
     "ajv-formats": "^2.1.1",
     "cron-parser": "^4.9.0"
   },
-  "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/pg": "^8.0.0",
-    "tsup": "^8.0.0",
-    "typescript": "^5.4.0",
-    "vitest": "^2.0.0"
-  },
   "peerDependencies": {
+    "@flowmonkey/core": "^1.0.0",
     "pg": "^8.0.0"
   },
   "peerDependenciesMeta": {
     "pg": {
       "optional": true
     }
-  }
+  },
+  "devDependencies": {
+    "@flowmonkey/core": "workspace:*",
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flowmonkey/flowmonkey.git",
+    "directory": "packages/triggers"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "flowmonkey",
+    "triggers",
+    "http",
+    "cron",
+    "webhook"
+  ],
+  "license": "MIT"
 }

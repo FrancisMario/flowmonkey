@@ -1,10 +1,12 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts'],
-  outDir: 'dist',
-  format: ['esm', 'cjs'],
+  entry: { index: 'src/index.ts' },
+  format: ['cjs', 'esm'],
   dts: true,
+  sourcemap: true,
+  clean: true,
   splitting: false,
-  sourcemap: false,
+  treeshake: true,
+  external: ['@flowmonkey/core'],
 });
