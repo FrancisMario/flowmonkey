@@ -1,6 +1,6 @@
 {
   "name": "@flowmonkey/jobs",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Job runner for FlowMonkey stateful handlers",
   "type": "module",
   "main": "./dist/index.cjs",
