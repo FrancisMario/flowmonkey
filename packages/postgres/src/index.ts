@@ -1,5 +1,5 @@
 // Schema
-export { schema, SCHEMA_VERSION, applySchema } from './schema';
+export { schema, SCHEMA_VERSION, applySchema, applyMigrationV010, applyMigrationV020, applyMigrationV030 } from './schema';
 
 // Stores
 export { PgExecutionStore } from './execution-store';
@@ -9,6 +9,7 @@ export {
   type Job,
   type JobStatus,
   type JobError,
+  type JobProgress,
   type JobStore,
   type CreateJobParams,
 } from './job-store';

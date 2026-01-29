@@ -2,6 +2,23 @@
 
 Background job runner for FlowMonkey stateful handlers.
 
+This package provides a job processing system for executing long-running, stateful handlers in the background with checkpointing, retries, and failure handling.
+
+## Table of Contents
+
+- [Installation](#installation)
+- [Overview](#overview)
+- [BasicJobRunner](#basicjobrunner)
+  - [Configuration](#configuration)
+  - [Registering Handlers](#registering-handlers)
+  - [Starting and Stopping](#starting-and-stopping)
+- [Job Lifecycle](#job-lifecycle)
+- [JobScheduler](#jobscheduler)
+- [JobReaper](#jobreaper)
+- [Stateful Handlers Integration](#stateful-handlers-integration)
+- [Monitoring](#monitoring)
+- [API Reference](#api-reference)
+
 ## Installation
 
 ```bash
@@ -10,124 +27,168 @@ pnpm add @flowmonkey/jobs
 
 ## Overview
 
-This package provides a job runner for executing long-running, stateful handlers in the background:
+When a stateful handler returns a `wait` result, the engine creates a job record. The job runner picks up these jobs, executes the handler, and manages the job lifecycle (retries, heartbeats, completion).
 
-- **BasicJobRunner** — Polling-based job processor
-- **JobScheduler** — Delayed and scheduled job creation
-- **JobReaper** — Cleanup of stalled/abandoned jobs
+The job system consists of three components:
 
-## Quick Start
+- **BasicJobRunner** - Polls for and processes jobs
+- **JobScheduler** - Creates delayed and scheduled jobs
+- **JobReaper** - Cleans up stalled and abandoned jobs
 
-```typescript
-import { BasicJobRunner } from '@flowmonkey/jobs';
-import { PgJobStore, PgExecutionStore } from '@flowmonkey/postgres';
-import { emailHandler, reportHandler } from './handlers';
-
-// Create stores
-const jobStore = new PgJobStore(pool);
-const execStore = new PgExecutionStore(pool);
-
-// Create runner
-const runner = new BasicJobRunner(jobStore, execStore, 'worker-1');
-
-// Register handlers
-runner.registerHandler('email-send', emailHandler);
-runner.registerHandler('report-generate', reportHandler);
-
-// Start processing
-await runner.start();
-
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  await runner.stop();
-});
 ```
-
-## Stateful Handlers
-
-Stateful handlers create jobs for background processing:
-
-```typescript
-import type { StepHandler } from '@flowmonkey/core';
-import { Result } from '@flowmonkey/core';
-
-export const emailHandler: StepHandler = {
-  type: 'email-send',
-  metadata: {
-    type: 'email-send',
-    name: 'Send Email',
-    description: 'Send email via provider',
-    category: 'external',
-    stateful: true,  // Mark as stateful
-    configSchema: {},
-  },
-  async execute({ input, execution, step }) {
-    // Handler creates a job and returns wait
-    // Job runner will call this again with job context
-    
-    const { to, subject, body } = input as EmailInput;
-    
-    // Actually send the email
-    await sendEmail({ to, subject, body });
-    
-    return Result.success({
-      sent: true,
-      timestamp: Date.now(),
-    });
-  },
-};
++------------------+     +----------------+     +------------------+
+|  Stateful        |     |    JobStore    |     |   BasicJobRunner |
+|  Handler         | --> |  (PostgreSQL)  | <-- |   (Worker)       |
++------------------+     +----------------+     +------------------+
+        |                        |                       |
+        | creates job            | persists              | claims & processes
+        | record                 | job state             | jobs
+        v                        v                       v
+   wait result            pending -> running        complete/fail
 ```
 
 ## BasicJobRunner
 
+The job runner polls for pending jobs and processes them.
+
 ### Configuration
 
 ```typescript
-const runner = new BasicJobRunner(jobStore, execStore, runnerId, {
-  pollInterval: 1000,    // Check for jobs every 1s
-  batchSize: 10,         // Process up to 10 jobs at once
-  maxConcurrent: 5,      // Max concurrent job executions
-  heartbeatInterval: 10000, // Heartbeat every 10s
+import { BasicJobRunner } from '@flowmonkey/jobs';
+import { PgJobStore, PgExecutionStore } from '@flowmonkey/postgres';
+
+const jobStore = new PgJobStore(pool);
+const executionStore = new PgExecutionStore(pool);
+
+const runner = new BasicJobRunner(jobStore, executionStore, 'worker-1', {
+  pollInterval: 1000,      // Check for jobs every 1 second
+  batchSize: 10,           // Claim up to 10 jobs at once
+  maxConcurrent: 5,        // Process up to 5 jobs concurrently
+  heartbeatInterval: 10000, // Send heartbeat every 10 seconds
 });
 ```
 
-### API
+Configuration options:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `pollInterval` | `1000` | Milliseconds between polling for new jobs |
+| `batchSize` | `10` | Maximum jobs to claim per poll |
+| `maxConcurrent` | `5` | Maximum concurrent job executions |
+| `heartbeatInterval` | `10000` | Milliseconds between heartbeat updates |
+
+### Registering Handlers
+
+Register handlers that process specific job types:
 
 ```typescript
-interface JobRunner {
-  // Start processing jobs
-  start(): Promise<void>;
-  
-  // Stop gracefully (waits for active jobs)
-  stop(): Promise<void>;
-  
-  // Register a handler
-  registerHandler(name: string, handler: StepHandler): void;
-  
-  // Stats
-  activeCount(): number;
-  completedCount(): number;
-  failedCount(): number;
+import { emailHandler, reportHandler } from './handlers';
+
+// Register handlers by type
+runner.registerHandler('email-send', emailHandler);
+runner.registerHandler('report-generate', reportHandler);
+
+// Or register multiple at once
+runner.registerHandlers({
+  'email-send': emailHandler,
+  'report-generate': reportHandler,
+  'data-export': exportHandler,
+});
+```
+
+The handler type must match the `handler` field in the job record, which typically corresponds to the step type that created the job.
+
+### Starting and Stopping
+
+```typescript
+// Start processing jobs
+await runner.start();
+console.log('Job runner started');
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('Shutting down...');
+  await runner.stop();
+  console.log('Job runner stopped');
+  process.exit(0);
+});
+```
+
+The `stop()` method:
+1. Stops accepting new jobs
+2. Waits for current jobs to complete (with timeout)
+3. Releases any uncompleted jobs back to pending
+
+## Job Lifecycle
+
+Jobs progress through these states:
+
+```
+pending -> running -> completed
+                  \-> failed
+```
+
+### Pending
+
+When a stateful handler returns `wait`, the engine creates a pending job:
+
+```typescript
+// Handler returns wait, engine creates job
+return Result.wait({
+  wakeAt: Date.now() + 3600000,
+  reason: 'Waiting for external process',
+});
+
+// Job is created:
+{
+  id: 'job-123',
+  executionId: 'exec-456',
+  stepId: 'process-data',
+  handler: 'data-processor',
+  status: 'pending',
+  input: { ... },
+  attempts: 0,
+  maxAttempts: 3,
 }
 ```
 
-### Lifecycle
+### Running
 
+When a worker claims a job:
+
+1. Job status changes to `running`
+2. `runner_id` is set to the worker ID
+3. `heartbeat_at` is updated periodically
+4. `attempts` is incremented
+
+### Completed
+
+When the handler succeeds:
+
+```typescript
+{
+  status: 'completed',
+  result: { ... },  // Handler output
+}
 ```
-┌──────────┐     ┌──────────┐     ┌───────────┐     ┌───────────┐
-│ PENDING  │────▶│ RUNNING  │────▶│ COMPLETED │     │  FAILED   │
-└──────────┘     └──────────┘     └───────────┘     └───────────┘
-     │                │                                   ▲
-     │                │ (error/timeout)                   │
-     │                └───────────────────────────────────┘
-     │                         │
-     │                         ▼ (retry if attempts < max)
-     └─────────────────────────┘
+
+### Failed
+
+When the handler fails after all retry attempts:
+
+```typescript
+{
+  status: 'failed',
+  error: {
+    code: 'PROCESS_ERROR',
+    message: 'Failed after 3 attempts',
+  },
+}
 ```
 
 ## JobScheduler
 
-Schedule jobs for future execution:
+Create jobs for future execution:
 
 ```typescript
 import { JobScheduler } from '@flowmonkey/jobs';
@@ -139,189 +200,347 @@ await scheduler.schedule({
   executionId: 'exec-123',
   stepId: 'send-reminder',
   handler: 'email-send',
-  input: { to: 'user@example.com', subject: 'Reminder' },
+  input: { to: 'user@example.com', template: 'reminder' },
   runAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours from now
-  maxAttempts: 3,
 });
 
-// Schedule recurring (cron-like)
+// Schedule a recurring job
 await scheduler.scheduleRecurring({
-  name: 'daily-digest',
-  cron: '0 9 * * *',
-  handler: 'digest-send',
-  input: { type: 'daily' },
+  executionId: 'exec-123',
+  stepId: 'daily-check',
+  handler: 'status-check',
+  input: { checkType: 'daily' },
+  cron: '0 9 * * *', // Daily at 9am
+  timezone: 'America/New_York',
 });
 ```
 
 ## JobReaper
 
-Clean up stalled jobs:
+Clean up jobs that are stuck or abandoned:
 
 ```typescript
 import { JobReaper } from '@flowmonkey/jobs';
 
 const reaper = new JobReaper(jobStore, {
-  stalledThreshold: 60000,  // Jobs with no heartbeat for 60s
-  checkInterval: 30000,     // Check every 30s
-  maxRetries: 3,
+  stalledThreshold: 60000,    // Jobs without heartbeat for 60s
+  maxReapBatch: 100,          // Process up to 100 stalled jobs at once
+  reapInterval: 30000,        // Check every 30 seconds
 });
 
+// Start the reaper
 await reaper.start();
 
-// On shutdown
+// Stop gracefully
 await reaper.stop();
 ```
 
-### Stalled Job Handling
+The reaper:
+1. Finds jobs in `running` status with old heartbeats
+2. Increments their attempt count
+3. If attempts < maxAttempts, sets status back to `pending` for retry
+4. If attempts >= maxAttempts, marks as `failed`
 
-Jobs are considered stalled when:
-1. Status is `running`
-2. Last heartbeat exceeds `stalledThreshold`
+## Stateful Handlers Integration
 
-Stalled jobs are either:
-- Reset to `pending` if `attempts < maxAttempts`
-- Marked as `failed` if max attempts reached
+Stateful handlers work with the job system for long-running operations. They have access to all the same decorators (`@Handler`, `@Input`, validation decorators) as stateless handlers, plus checkpoint methods. The key difference is the lifecycle - stateful handlers can pause with `wait()` and resume later.
 
-## Job Store Interface
+### Creating a Stateful Handler
 
 ```typescript
-interface JobStore {
-  // Create a new job
-  create(params: CreateJobParams): Promise<Job>;
-  
-  // Get job by ID
-  get(id: string): Promise<Job | undefined>;
-  
-  // Claim a job for processing (atomic)
-  claim(id: string, runnerId: string): Promise<boolean>;
-  
-  // Update heartbeat
-  heartbeat(id: string): Promise<void>;
-  
-  // Complete job with result
-  complete(id: string, result: unknown): Promise<void>;
-  
-  // Fail job with error
-  fail(id: string, error: JobError): Promise<void>;
-  
-  // Query jobs
-  listByStatus(status: JobStatus, limit: number): Promise<Job[]>;
-  findStalled(since: number, limit: number): Promise<Job[]>;
-  getByExecution(executionId: string): Promise<Job[]>;
-  
-  // Reset stalled job
-  resetStalled(id: string): Promise<void>;
+import { Handler, Input, StatefulHandler } from '@flowmonkey/core';
+import type { StepResult } from '@flowmonkey/core';
+
+interface ProcessingCheckpoint {
+  currentIndex: number;
+  processedCount: number;
+  errors: string[];
 }
 
-interface Job {
-  id: string;
-  executionId: string;
-  stepId: string;
-  handler: string;
-  status: JobStatus;
-  input: unknown;
-  result?: unknown;
-  error?: JobError;
-  runnerId?: string;
-  heartbeatAt?: number;
-  heartbeatMs: number;
-  attempts: number;
-  maxAttempts: number;
-  createdAt: number;
-  updatedAt: number;
-}
+@Handler({
+  type: 'batch-processor',
+  name: 'Batch Processor',
+  description: 'Process items with checkpointing',
+  category: 'data',
+  stateful: true, // Marks handler as stateful
+})
+export class BatchProcessor extends StatefulHandler<
+  BatchInput,
+  ProcessingCheckpoint,
+  BatchOutput
+> {
+  @Input({ type: 'array', source: 'config', required: true })
+  items!: unknown[];
 
-type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
-```
+  @Input({ type: 'number', source: 'config', defaultValue: 10 })
+  batchSize!: number;
 
-## Scaling Workers
+  async execute(): Promise<StepResult> {
+    // Load or initialize checkpoint
+    const checkpoint = await this.loadCheckpoint() ?? {
+      currentIndex: 0,
+      processedCount: 0,
+      errors: [],
+    };
 
-Run multiple job runners for horizontal scaling:
+    // Process a batch
+    const endIndex = Math.min(
+      checkpoint.currentIndex + this.batchSize,
+      this.items.length
+    );
 
-```typescript
-// worker-1.ts
-const runner1 = new BasicJobRunner(jobStore, execStore, 'worker-1');
-await runner1.start();
+    for (let i = checkpoint.currentIndex; i < endIndex; i++) {
+      try {
+        await this.processItem(this.items[i]);
+        checkpoint.processedCount++;
+      } catch (error) {
+        checkpoint.errors.push(`Item ${i}: ${error.message}`);
+      }
+      checkpoint.currentIndex = i + 1;
+    }
 
-// worker-2.ts
-const runner2 = new BasicJobRunner(jobStore, execStore, 'worker-2');
-await runner2.start();
-```
+    // More items to process?
+    if (checkpoint.currentIndex < this.items.length) {
+      await this.saveCheckpoint(checkpoint);
+      
+      return this.wait({
+        wakeAt: Date.now() + 100, // Continue immediately
+        reason: `Processed ${checkpoint.processedCount}/${this.items.length}`,
+      });
+    }
 
-Jobs are claimed atomically, so multiple workers can safely poll the same queue.
-
-## Best Practices
-
-### 1. Idempotent Handlers
-
-Make handlers idempotent for safe retries:
-
-```typescript
-async execute({ input, context }) {
-  const idempotencyKey = `email-${input.to}-${input.messageId}`;
-  
-  // Check if already sent
-  const sent = await checkSent(idempotencyKey);
-  if (sent) {
-    return Result.success({ alreadySent: true });
+    // All done
+    return this.success({
+      totalProcessed: checkpoint.processedCount,
+      errors: checkpoint.errors,
+    });
   }
-  
-  // Send and record
-  await sendEmail(input);
-  await recordSent(idempotencyKey);
-  
-  return Result.success({ sent: true });
-}
-```
 
-### 2. Heartbeat for Long Jobs
-
-For jobs that take > 30 seconds:
-
-```typescript
-async execute({ input }) {
-  const items = input.items;
-  
-  for (const item of items) {
-    await processItem(item);
-    
-    // Heartbeat to prevent stall detection
-    await this.heartbeat?.();
+  private async processItem(item: unknown): Promise<void> {
+    // Processing logic
   }
-  
-  return Result.success({ processed: items.length });
 }
 ```
 
-### 3. Graceful Shutdown
+### Handler Lifecycle with Jobs
+
+1. **First Call**: Handler starts processing, saves checkpoint, returns `wait`
+2. **Job Created**: Engine creates job record with handler input
+3. **Job Claimed**: Runner picks up job, initializes handler
+4. **Handler Resumes**: Handler loads checkpoint, continues processing
+5. **Loop**: Steps 2-4 repeat until handler returns `success` or `failure`
+6. **Completion**: Job marked complete, execution continues
+
+### Checkpoint Storage
+
+Checkpoints are stored in the execution context:
 
 ```typescript
-let shuttingDown = false;
+// Save checkpoint
+await this.saveCheckpoint({ progress: 50 });
+// Stored at: execution.context.__checkpoints[stepId]
 
-process.on('SIGTERM', async () => {
-  shuttingDown = true;
-  
-  // Wait for current jobs to complete
-  await runner.stop();
-  
-  await pool.end();
-  process.exit(0);
+// Load checkpoint
+const checkpoint = await this.loadCheckpoint();
+// Retrieved from: execution.context.__checkpoints[stepId]
+```
+
+## Monitoring
+
+### Job Metrics
+
+```typescript
+import { JobMetrics } from '@flowmonkey/jobs';
+
+const metrics = new JobMetrics(jobStore);
+
+// Get current metrics
+const stats = await metrics.getStats();
+console.log(stats);
+// {
+//   pending: 15,
+//   running: 3,
+//   completed: 1250,
+//   failed: 12,
+//   avgProcessingTime: 2500,
+// }
+
+// Get metrics by handler type
+const handlerStats = await metrics.getStatsByHandler();
+// {
+//   'email-send': { pending: 10, completed: 800 },
+//   'data-export': { pending: 5, completed: 450 },
+// }
+```
+
+### Runner Events
+
+```typescript
+runner.on('jobStarted', (job) => {
+  console.log(`Started job ${job.id} for handler ${job.handler}`);
+});
+
+runner.on('jobCompleted', (job, result) => {
+  console.log(`Completed job ${job.id}:`, result);
+});
+
+runner.on('jobFailed', (job, error) => {
+  console.error(`Failed job ${job.id}:`, error);
+  alerting.notify(`Job failed: ${job.handler}`, error);
+});
+
+runner.on('jobRetry', (job, attempt) => {
+  console.log(`Retrying job ${job.id}, attempt ${attempt}`);
 });
 ```
 
-### 4. Monitor Job Metrics
+### Health Check
 
 ```typescript
-setInterval(async () => {
-  const pending = await jobStore.listByStatus('pending', 1000);
-  const running = await jobStore.listByStatus('running', 1000);
-  const failed = await jobStore.listByStatus('failed', 1000);
+async function checkJobRunnerHealth(): Promise<HealthStatus> {
+  const stats = await metrics.getStats();
   
-  metrics.gauge('jobs.pending', pending.length);
-  metrics.gauge('jobs.running', running.length);
-  metrics.gauge('jobs.failed', failed.length);
-  metrics.gauge('jobs.completed', runner.completedCount());
-}, 10000);
+  const healthy = 
+    stats.pending < 1000 && // Not too many pending
+    (stats.running / runner.maxConcurrent) < 0.9; // Not at capacity
+  
+  return {
+    healthy,
+    stats,
+    runner: {
+      id: runner.id,
+      running: runner.isRunning,
+      activeJobs: runner.activeJobCount,
+    },
+  };
+}
+```
+
+## API Reference
+
+### BasicJobRunner
+
+```typescript
+class BasicJobRunner {
+  constructor(
+    jobStore: JobStore,
+    executionStore: StateStore,
+    runnerId: string,
+    options?: JobRunnerOptions
+  );
+
+  // Register a handler
+  registerHandler(type: string, handler: StepHandler): void;
+  
+  // Register multiple handlers
+  registerHandlers(handlers: Record<string, StepHandler>): void;
+
+  // Start processing
+  start(): Promise<void>;
+  
+  // Stop processing (graceful)
+  stop(): Promise<void>;
+
+  // Check if running
+  readonly isRunning: boolean;
+  
+  // Number of active jobs
+  readonly activeJobCount: number;
+  
+  // Runner ID
+  readonly id: string;
+
+  // Event emitter methods
+  on(event: 'jobStarted' | 'jobCompleted' | 'jobFailed' | 'jobRetry', handler: Function): void;
+}
+
+interface JobRunnerOptions {
+  pollInterval?: number;      // Default: 1000
+  batchSize?: number;         // Default: 10
+  maxConcurrent?: number;     // Default: 5
+  heartbeatInterval?: number; // Default: 10000
+}
+```
+
+### JobScheduler
+
+```typescript
+class JobScheduler {
+  constructor(jobStore: JobStore);
+
+  // Schedule a job for later execution
+  schedule(job: ScheduledJob): Promise<string>;
+
+  // Schedule a recurring job
+  scheduleRecurring(job: RecurringJob): Promise<string>;
+
+  // Cancel a scheduled job
+  cancel(jobId: string): Promise<boolean>;
+}
+
+interface ScheduledJob {
+  executionId: string;
+  stepId: string;
+  handler: string;
+  input: unknown;
+  runAt: number;
+  maxAttempts?: number;
+}
+
+interface RecurringJob {
+  executionId: string;
+  stepId: string;
+  handler: string;
+  input: unknown;
+  cron: string;
+  timezone?: string;
+  maxAttempts?: number;
+}
+```
+
+### JobReaper
+
+```typescript
+class JobReaper {
+  constructor(jobStore: JobStore, options?: ReaperOptions);
+
+  // Start the reaper
+  start(): Promise<void>;
+  
+  // Stop the reaper
+  stop(): Promise<void>;
+
+  // Manually trigger a reap cycle
+  reap(): Promise<number>;
+}
+
+interface ReaperOptions {
+  stalledThreshold?: number;  // Default: 60000
+  maxReapBatch?: number;      // Default: 100
+  reapInterval?: number;      // Default: 30000
+}
+```
+
+### JobMetrics
+
+```typescript
+class JobMetrics {
+  constructor(jobStore: JobStore);
+
+  // Get overall statistics
+  getStats(): Promise<JobStats>;
+
+  // Get statistics by handler type
+  getStatsByHandler(): Promise<Record<string, JobStats>>;
+}
+
+interface JobStats {
+  pending: number;
+  running: number;
+  completed: number;
+  failed: number;
+  avgProcessingTime?: number;
+}
 ```
 
 ## License

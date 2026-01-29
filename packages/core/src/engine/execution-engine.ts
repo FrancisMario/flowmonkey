@@ -100,9 +100,9 @@ const CANCELLABLE_STATUSES = ['pending', 'running', 'waiting'] as const;
  * Stateless — all state lives in Execution objects via StateStore.
  */
 export class Engine {
-  private readonly store: StateStore;
-  private readonly handlers: HandlerRegistry;
-  private readonly flows: FlowRegistry;
+  private readonly _store: StateStore;
+  private readonly _handlers: HandlerRegistry;
+  private readonly _flows: FlowRegistry;
   private readonly events?: EventBus;
   private readonly tokenManager?: ResumeTokenManager;
   private readonly opts: Required<Omit<EngineOptions, 'contextLimits' | 'tokenManager'>> & {
@@ -116,9 +116,9 @@ export class Engine {
     events?: EventBus,
     options?: EngineOptions
   ) {
-    this.store = store;
-    this.handlers = handlers;
-    this.flows = flows;
+    this._store = store;
+    this._handlers = handlers;
+    this._flows = flows;
     this.events = events;
     this.tokenManager = options?.tokenManager;
     this.opts = {
@@ -127,6 +127,21 @@ export class Engine {
       timeoutMs: options?.timeoutMs ?? 30000,
       contextLimits: options?.contextLimits,
     };
+  }
+
+  /** Access to the flow registry. */
+  get flows(): FlowRegistry {
+    return this._flows;
+  }
+
+  /** Access to the handler registry. */
+  get handlers(): HandlerRegistry {
+    return this._handlers;
+  }
+
+  /** Access to the state store. */
+  get store(): StateStore {
+    return this._store;
   }
 
   /**
@@ -139,12 +154,12 @@ export class Engine {
     options?: CreateOptions
   ): Promise<CreateResult> {
     // Check for idempotency hit
-    if (options?.idempotencyKey && this.store.findByIdempotencyKey) {
+    if (options?.idempotencyKey && this._store.findByIdempotencyKey) {
       const windowMs = Math.min(
         options.idempotencyWindowMs ?? DEFAULT_IDEMPOTENCY_WINDOW_MS,
         MAX_IDEMPOTENCY_WINDOW_MS
       );
-      const existing = await this.store.findByIdempotencyKey(flowId, options.idempotencyKey, windowMs);
+      const existing = await this._store.findByIdempotencyKey(flowId, options.idempotencyKey, windowMs);
       if (existing) {
         return {
           execution: existing,
@@ -154,7 +169,7 @@ export class Engine {
       }
     }
 
-    const flow = this.flows.get(flowId);
+    const flow = this._flows.get(flowId);
     if (!flow) {
       throw new ExecutionError('FLOW_NOT_FOUND', '', `Flow "${flowId}" not found`);
     }
@@ -182,7 +197,7 @@ export class Engine {
       metadata: options?.metadata,
     };
 
-    await this.store.save(execution);
+    await this._store.save(execution);
     this.events?.onExecutionCreated?.({ executionId: execution.id, flowId, context });
 
     return {
@@ -196,7 +211,7 @@ export class Engine {
    * Execute one step. Call repeatedly until done.
    */
   async tick(executionId: string): Promise<TickResult> {
-    const execution = await this.store.load(executionId);
+    const execution = await this._store.load(executionId);
     if (!execution) {
       return { done: true, status: 'failed', error: { code: 'NOT_FOUND', message: 'Execution not found' } };
     }
@@ -222,7 +237,7 @@ export class Engine {
     }
 
     // Load flow
-    const flow = this.flows.get(execution.flowId, execution.flowVersion);
+    const flow = this._flows.get(execution.flowId, execution.flowVersion);
     if (!flow) {
       return this.fail(execution, 'FLOW_NOT_FOUND', `Flow "${execution.flowId}" not found`);
     }
@@ -234,7 +249,7 @@ export class Engine {
     }
 
     // Get handler
-    const handler = this.handlers.get(step.type);
+    const handler = this._handlers.get(step.type);
     if (!handler) {
       return this.fail(execution, 'HANDLER_NOT_FOUND', `No handler for "${step.type}"`);
     }
@@ -349,7 +364,7 @@ export class Engine {
       ? { source: 'user', reason: options }
       : options ?? { source: 'user' };
 
-    const execution = await this.store.load(executionId);
+    const execution = await this._store.load(executionId);
 
     if (!execution) {
       return {
@@ -379,7 +394,7 @@ export class Engine {
     // 1. Set to cancelling (transitional)
     execution.status = 'cancelling';
     execution.updatedAt = now();
-    await this.store.save(execution);
+    await this._store.save(execution);
 
     // 2. Invalidate resume tokens
     let tokensInvalidated = 0;
@@ -395,8 +410,8 @@ export class Engine {
 
     // 3. Cancel children (sub-flows)
     let childrenCancelled = 0;
-    if (this.store.findChildren) {
-      const children = await this.store.findChildren(executionId);
+    if (this._store.findChildren) {
+      const children = await this._store.findChildren(executionId);
       for (const child of children) {
         const result = await this.cancel(child.id, { source: 'parent', reason: 'Parent cancelled' });
         if (result.cancelled) childrenCancelled++;
@@ -412,7 +427,7 @@ export class Engine {
       cancelledAt,
     };
     execution.updatedAt = cancelledAt;
-    await this.store.save(execution);
+    await this._store.save(execution);
 
     // 5. Emit event
     this.events?.onExecutionFailed?.({
@@ -435,7 +450,7 @@ export class Engine {
    * Get execution by ID.
    */
   async get(executionId: string): Promise<Execution | null> {
-    return this.store.load(executionId);
+    return this._store.load(executionId);
   }
 
   // --- Private ---
@@ -444,7 +459,7 @@ export class Engine {
     execution.status = 'failed';
     execution.error = { code, message, stepId: execution.currentStepId, timestamp: now() };
     execution.updatedAt = now();
-    await this.store.save(execution);
+    await this._store.save(execution);
     this.events?.onExecutionFailed?.({ executionId: execution.id, stepId: execution.currentStepId, error: execution.error });
     return { done: true, status: 'failed', error: { code, message } };
   }
@@ -462,7 +477,7 @@ export class Engine {
         // Complete
         execution.status = 'completed';
         execution.updatedAt = now();
-        await this.store.save(execution);
+        await this._store.save(execution);
         this.events?.onExecutionCompleted?.({ executionId: execution.id, context: execution.context, totalSteps: execution.stepCount });
         return { done: true, status: 'completed', stepId: step.id, outcome: 'success' };
       }
@@ -473,7 +488,7 @@ export class Engine {
 
       execution.currentStepId = next;
       execution.updatedAt = now();
-      await this.store.save(execution);
+      await this._store.save(execution);
       return { done: false, status: 'running', stepId: step.id, outcome: 'success' };
     }
 
@@ -490,7 +505,7 @@ export class Engine {
           timestamp: now(),
         };
         execution.updatedAt = now();
-        await this.store.save(execution);
+        await this._store.save(execution);
         this.events?.onExecutionFailed?.({ executionId: execution.id, stepId: step.id, error: execution.error });
         return { done: true, status: 'failed', stepId: step.id, outcome: 'failure', error: { code: execution.error.code, message: execution.error.message } };
       }
@@ -501,7 +516,7 @@ export class Engine {
 
       execution.currentStepId = next;
       execution.updatedAt = now();
-      await this.store.save(execution);
+      await this._store.save(execution);
       return { done: false, status: 'running', stepId: step.id, outcome: 'failure' };
     }
 
@@ -520,7 +535,7 @@ export class Engine {
       }
     }
     execution.updatedAt = now();
-    await this.store.save(execution);
+    await this._store.save(execution);
     this.events?.onExecutionWaiting?.({ executionId: execution.id, stepId: step.id, wakeAt: result.wakeAt, reason: result.waitReason });
     return { done: false, status: 'waiting', stepId: step.id, outcome: 'wait', wakeAt: result.wakeAt };
   }

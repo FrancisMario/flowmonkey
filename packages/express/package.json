@@ -1,0 +1,59 @@
+{
+  "name": "@flowmonkey/express",
+  "version": "0.0.1",
+  "description": "Express integration for FlowMonkey workflows",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "@flowmonkey/core": "^1.0.0",
+    "@flowmonkey/postgres": "^1.0.0",
+    "@flowmonkey/jobs": "^1.0.0",
+    "express": "^4.0.0 || ^5.0.0"
+  },
+  "devDependencies": {
+    "@flowmonkey/core": "workspace:*",
+    "@flowmonkey/postgres": "workspace:*",
+    "@flowmonkey/jobs": "workspace:*",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.0.0",
+    "@types/supertest": "^6.0.2",
+    "express": "^4.21.0",
+    "supertest": "^7.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0"
+  },
+  "keywords": [
+    "flowmonkey",
+    "workflow",
+    "express",
+    "middleware"
+  ],
+  "author": "",
+  "license": "MIT"
+}

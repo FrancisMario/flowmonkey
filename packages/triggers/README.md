@@ -2,6 +2,28 @@
 
 HTTP and schedule triggers for starting FlowMonkey workflows.
 
+This package provides triggers that automatically start workflows based on external events like HTTP webhooks or cron schedules.
+
+## Table of Contents
+
+- [Installation](#installation)
+- [Overview](#overview)
+- [TriggerService](#triggerservice)
+  - [Configuration](#configuration)
+  - [Registering Triggers](#registering-triggers)
+- [HTTP Triggers](#http-triggers)
+  - [Basic HTTP Trigger](#basic-http-trigger)
+  - [Input Validation](#input-validation)
+  - [Authentication](#authentication)
+  - [Framework Adapters](#framework-adapters)
+- [Schedule Triggers](#schedule-triggers)
+  - [Cron Expressions](#cron-expressions)
+  - [Timezones](#timezones)
+  - [Static Context](#static-context)
+- [Trigger Management](#trigger-management)
+- [Storage](#storage)
+- [API Reference](#api-reference)
+
 ## Installation
 
 ```bash
@@ -10,44 +32,58 @@ pnpm add @flowmonkey/triggers
 
 ## Overview
 
-This package provides triggers to start workflows from external events:
+Triggers start workflow executions automatically based on external events:
 
-- **HTTP Triggers** — Receive webhooks/API calls
-- **Schedule Triggers** — Run on cron schedules
-- **TriggerService** — Trigger management and execution
+- **HTTP Triggers** - Start workflows when HTTP requests are received
+- **Schedule Triggers** - Start workflows on cron schedules
 
-## Quick Start
+```
+                        +------------------+
+HTTP Request  --------> |                  |
+                        |  TriggerService  | -----> Engine.create()
+Cron Schedule --------> |                  |
+                        +------------------+
+```
+
+## TriggerService
+
+The TriggerService manages trigger registration and execution.
+
+### Configuration
 
 ```typescript
 import express from 'express';
-import { TriggerService } from '@flowmonkey/triggers';
-import { PgTriggerStore } from '@flowmonkey/triggers';
+import { TriggerService, PgTriggerStore } from '@flowmonkey/triggers';
 import { Engine } from '@flowmonkey/core';
 
 const app = express();
 app.use(express.json());
 
-// Create trigger store
 const triggerStore = new PgTriggerStore(pool);
+const engine = new Engine(store, handlers, flows);
 
-// Create trigger service with HTTP and schedule adapters
 const triggers = new TriggerService(triggerStore, engine, {
-  // HTTP adapter - routes auto-registered
+  // HTTP adapter - auto-registers routes
   http: {
-    app,
-    framework: 'express',    // 'express' | 'fastify' | 'hono' | 'koa'
-    basePath: '/webhooks',   // POST /webhooks/:triggerId
-    middleware: [],          // Optional auth middleware
+    app,                       // Express app instance
+    framework: 'express',      // 'express' | 'fastify' | 'hono' | 'koa'
+    basePath: '/webhooks',     // Base path for trigger routes
+    middleware: [],            // Optional middleware
   },
-  // Schedule adapter - cron runner auto-started
+  
+  // Schedule adapter - auto-starts scheduler
   schedule: {
     enabled: true,
-    timezone: 'UTC',
-    checkInterval: 60000,
+    timezone: 'UTC',           // Default timezone
+    checkInterval: 60000,      // Check every minute
   },
 });
+```
 
-// Register HTTP trigger - route auto-created
+### Registering Triggers
+
+```typescript
+// Register an HTTP trigger
 await triggers.register({
   id: 'order-webhook',
   type: 'http',
@@ -58,450 +94,570 @@ await triggers.register({
     type: 'object',
     properties: {
       orderId: { type: 'string' },
-      customer: { type: 'object' },
       items: { type: 'array' },
     },
-    required: ['orderId', 'items'],
+    required: ['orderId'],
   },
   contextKey: 'order',
 });
-// -> Route registered: POST /webhooks/order-webhook
+// Route created: POST /webhooks/order-webhook
 
-// Register schedule trigger - auto-scheduled
+// Register a schedule trigger
 await triggers.register({
   id: 'daily-report',
   type: 'schedule',
   name: 'Daily Report',
   flowId: 'generate-report',
   enabled: true,
-  schedule: '0 9 * * *',  // 9am daily
+  schedule: '0 9 * * *',      // 9am daily
   timezone: 'America/New_York',
   staticContext: { reportType: 'daily' },
 });
-// -> Scheduled: daily-report (next run: 2024-01-02 09:00 EST)
+// Scheduled: Next run at 9:00 AM ET
 ```
 
 ## HTTP Triggers
 
-### Framework Adapters
+HTTP triggers create endpoints that start workflows when called.
 
-The TriggerService automatically registers routes when you provide an app instance:
-
-```typescript
-// Express
-import express from 'express';
-const app = express();
-
-const triggers = new TriggerService(store, engine, {
-  http: { app, framework: 'express', basePath: '/webhooks' },
-});
-
-// Fastify
-import Fastify from 'fastify';
-const fastify = Fastify();
-
-const triggers = new TriggerService(store, engine, {
-  http: { app: fastify, framework: 'fastify', basePath: '/webhooks' },
-});
-
-// Hono
-import { Hono } from 'hono';
-const hono = new Hono();
-
-const triggers = new TriggerService(store, engine, {
-  http: { app: hono, framework: 'hono', basePath: '/webhooks' },
-});
-```
-
-### Auto-Registered Routes
-
-When a trigger is registered, routes are automatically created:
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/webhooks/:triggerId` | Fire trigger with payload |
-| GET | `/webhooks/:triggerId` | Get trigger info (if enabled) |
-
-### No App Instance Warning
-
-If you register an HTTP trigger without providing an app instance:
+### Basic HTTP Trigger
 
 ```typescript
-const triggers = new TriggerService(store, engine); // No http config!
-
 await triggers.register({
-  id: 'my-webhook',
+  id: 'user-signup',
   type: 'http',
-  // ...
+  name: 'User Signup Webhook',
+  flowId: 'onboard-user',
+  enabled: true,
+  contextKey: 'user', // Request body stored at context.user
 });
-// Warning: HTTP trigger 'my-webhook' registered but no HTTP adapter configured.
-//          Trigger endpoint will not be accessible.
-//          To fix: Pass { http: { app, framework } } to TriggerService constructor.
 ```
 
-### Custom Response Handling
+When a POST request is made to `/webhooks/user-signup`:
 
-Customize responses via config:
+```bash
+curl -X POST http://localhost:3000/webhooks/user-signup \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "name": "Alice"}'
+```
+
+The workflow starts with context:
 
 ```typescript
-const triggers = new TriggerService(store, engine, {
-  http: {
-    app,
-    framework: 'express',
-    basePath: '/webhooks',
-    // Custom response formatter
-    formatResponse: (result) => ({
-      ok: true,
-      execution_id: result.executionId,
-      triggered_at: result.firedAt,
-    }),
-    // Custom error formatter
-    formatError: (error) => ({
-      ok: false,
-      error: error.code,
-      message: error.message,
-      details: error.details,
-    }),
+{
+  user: {
+    email: 'user@example.com',
+    name: 'Alice',
   },
-});
+  _trigger: {
+    id: 'user-signup',
+    type: 'http',
+    timestamp: 1706500000000,
+  },
+}
 ```
 
 ### Input Validation
 
-HTTP triggers validate incoming payloads against JSON Schema:
+Validate incoming requests using JSON Schema:
 
 ```typescript
-await triggerService.register({
-  id: 'user-signup',
+await triggers.register({
+  id: 'payment-webhook',
   type: 'http',
-  name: 'User Signup',
-  flowId: 'onboard-user',
+  name: 'Payment Webhook',
+  flowId: 'process-payment',
   enabled: true,
   inputSchema: {
     type: 'object',
     properties: {
-      email: {
-        type: 'string',
-        format: 'email',
-      },
-      name: {
-        type: 'string',
-        minLength: 1,
-        maxLength: 100,
-      },
-      plan: {
-        type: 'string',
-        enum: ['free', 'pro', 'enterprise'],
+      transactionId: { type: 'string', minLength: 10 },
+      amount: { type: 'number', minimum: 0 },
+      currency: { type: 'string', enum: ['USD', 'EUR', 'GBP'] },
+      customer: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          email: { type: 'string', format: 'email' },
+        },
+        required: ['id'],
       },
     },
-    required: ['email', 'name'],
-    additionalProperties: false,
+    required: ['transactionId', 'amount', 'currency'],
   },
-  contextKey: 'user',  // Payload stored at context.user
+  contextKey: 'payment',
 });
 ```
 
-### Validation Errors
+Invalid requests receive a 400 response:
 
-```typescript
-// Invalid request
-POST /webhooks/user-signup
-{
-  "email": "invalid-email",
-  "name": ""
-}
-
-// Response (400)
+```json
 {
   "error": "Validation failed",
   "details": [
-    { "path": "email", "message": "must be a valid email" },
-    { "path": "name", "message": "must have at least 1 character" }
+    { "path": "/amount", "message": "must be >= 0" }
   ]
 }
 ```
 
-## Schedule Triggers
+### Authentication
 
-### Cron Syntax
-
-```
-┌───────────── minute (0-59)
-│ ┌───────────── hour (0-23)
-│ │ ┌───────────── day of month (1-31)
-│ │ │ ┌───────────── month (1-12)
-│ │ │ │ ┌───────────── day of week (0-7, 0 and 7 are Sunday)
-│ │ │ │ │
-* * * * *
-```
-
-### Examples
+Add authentication middleware:
 
 ```typescript
-// Every minute
-schedule: '* * * * *'
-
-// Every hour at minute 0
-schedule: '0 * * * *'
-
-// Daily at 9am
-schedule: '0 9 * * *'
-
-// Monday-Friday at 9am
-schedule: '0 9 * * 1-5'
-
-// First day of month at midnight
-schedule: '0 0 1 * *'
-
-// Every 15 minutes
-schedule: '*/15 * * * *'
-```
-
-## Schedule Triggers
-
-### Enabling the Scheduler
-
-```typescript
-const triggers = new TriggerService(store, engine, {
-  schedule: {
-    enabled: true,           // Auto-start scheduler
-    checkInterval: 60000,    // Check every minute
-    timezone: 'UTC',         // Default timezone
-  },
-});
-```
-
-### No Scheduler Warning
-
-If you register a schedule trigger without enabling the scheduler:
-
-```typescript
-const triggers = new TriggerService(store, engine); // No schedule config!
-
-await triggers.register({
-  id: 'daily-report',
-  type: 'schedule',
-  schedule: '0 9 * * *',
-  // ...
-});
-// Warning: Schedule trigger 'daily-report' registered but scheduler not enabled.
-//          Trigger will never fire.
-//          To fix: Pass { schedule: { enabled: true } } to TriggerService constructor.
-```
-
-### Timezone Support
-
-```typescript
-await triggerService.register({
-  id: 'daily-report',
-  type: 'schedule',
-  flowId: 'generate-report',
-  enabled: true,
-  schedule: '0 9 * * *',
-  timezone: 'America/New_York',  // Runs at 9am ET
-  staticContext: {},
-});
-```
-
-## Trigger Service API
-
-```typescript
-interface TriggerServiceConfig {
-  // HTTP adapter for webhook triggers
-  http?: {
-    app: any;                      // Express, Fastify, Hono, etc.
-    framework: 'express' | 'fastify' | 'hono' | 'koa';
-    basePath?: string;             // Default: '/triggers'
-    middleware?: Function[];       // Global middleware
-    formatResponse?: (result: FireResult) => unknown;
-    formatError?: (error: Error) => unknown;
-    infoEndpoint?: boolean;        // Enable GET /:triggerId (default: false)
-  };
-  
-  // Schedule adapter for cron triggers
-  schedule?: {
-    enabled: boolean;              // Enable scheduler
-    checkInterval?: number;        // Default: 60000 (1 min)
-    timezone?: string;             // Default: 'UTC'
-  };
-}
-
-interface TriggerService {
-  // Register a new trigger (auto-registers routes/schedules)
-  register(trigger: Trigger): Promise<void>;
-  
-  // Update trigger (updates routes/schedules)
-  update(id: string, updates: Partial<Trigger>): Promise<void>;
-  
-  // Delete trigger (removes routes/schedules)
-  delete(id: string): Promise<void>;
-  
-  // Get trigger by ID
-  get(id: string): Promise<Trigger | undefined>;
-  
-  // List all triggers
-  list(filter?: TriggerFilter): Promise<Trigger[]>;
-  
-  // Fire a trigger programmatically
-  fire(triggerId: string, payload: unknown): Promise<FireResult>;
-  
-  // Enable/disable trigger
-  enable(id: string): Promise<void>;
-  disable(id: string): Promise<void>;
-  
-  // Graceful shutdown
-  shutdown(): Promise<void>;
-  
-  // Health check
-  isHealthy(): Promise<boolean>;
-}
-
-interface FireResult {
-  executionId: string;
-  triggerId: string;
-  flowId: string;
-  firedAt: number;
-}
-```
-
-## Trigger Types
-
-### HTTP Trigger
-
-```typescript
-interface HttpTrigger {
-  id: string;
-  type: 'http';
-  name: string;
-  description?: string;
-  flowId: string;
-  enabled: boolean;
-  inputSchema: JSONSchema;  // Validation schema
-  contextKey: string;       // Where to store payload
-  createdAt: number;
-  updatedAt: number;
-}
-```
-
-### Schedule Trigger
-
-```typescript
-interface ScheduleTrigger {
-  id: string;
-  type: 'schedule';
-  name: string;
-  description?: string;
-  flowId: string;
-  enabled: boolean;
-  schedule: string;         // Cron expression
-  timezone: string;         // IANA timezone
-  staticContext: object;    // Context passed to flow
-  lastRunAt?: number;       // Last execution time
-  nextRunAt?: number;       // Computed next run
-  createdAt: number;
-  updatedAt: number;
-}
-```
-
-## Authentication
-
-Pass authentication middleware via config:
-
-```typescript
-// API key middleware
-const apiKeyAuth = (req, res, next) => {
-  const apiKey = req.headers['x-api-key'];
-  if (!apiKey || !isValidApiKey(apiKey)) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  next();
-};
-
-// Webhook signature verification
-const verifySignature = (req, res, next) => {
-  const signature = req.headers['x-webhook-signature'];
-  const payload = JSON.stringify(req.body);
-  
-  const expected = crypto
-    .createHmac('sha256', process.env.WEBHOOK_SECRET)
-    .update(payload)
-    .digest('hex');
-  
-  if (signature !== expected) {
-    return res.status(401).json({ error: 'Invalid signature' });
-  }
-  
-  next();
-};
-
-// Apply middleware to all trigger routes
-const triggers = new TriggerService(store, engine, {
+const triggers = new TriggerService(triggerStore, engine, {
   http: {
     app,
     framework: 'express',
     basePath: '/webhooks',
-    middleware: [apiKeyAuth, verifySignature], // Applied to all routes
+    middleware: [
+      // API key authentication
+      (req, res, next) => {
+        const apiKey = req.headers['x-api-key'];
+        if (!apiKey || !isValidApiKey(apiKey)) {
+          return res.status(401).json({ error: 'Invalid API key' });
+        }
+        next();
+      },
+    ],
   },
 });
+```
 
-// Or per-trigger authentication via trigger config
+Or use per-trigger authentication:
+
+```typescript
 await triggers.register({
   id: 'secure-webhook',
   type: 'http',
-  flowId: 'process-secure',
+  flowId: 'secure-flow',
   enabled: true,
-  auth: {
-    type: 'hmac',
-    secret: process.env.WEBHOOK_SECRET,
-    header: 'x-signature',
+  config: {
+    // Webhook signature verification
+    signatureHeader: 'X-Webhook-Signature',
+    signatureSecret: process.env.WEBHOOK_SECRET,
+    signatureAlgorithm: 'sha256',
   },
-  // ...
 });
 ```
 
-## Monitoring
+### Framework Adapters
+
+The TriggerService supports multiple web frameworks:
+
+#### Express
 
 ```typescript
-// Track trigger executions
-triggerService.on('fired', ({ triggerId, executionId, duration }) => {
-  metrics.histogram('trigger.fire.duration', duration, { triggerId });
-  metrics.increment('trigger.fired', { triggerId });
-});
+import express from 'express';
 
-triggerService.on('error', ({ triggerId, error }) => {
-  metrics.increment('trigger.error', { triggerId, code: error.code });
-});
+const app = express();
+app.use(express.json());
 
-// Track schedule runs
-scheduler.on('run', ({ triggerId, nextRunAt }) => {
-  metrics.increment('schedule.run', { triggerId });
-});
-
-scheduler.on('missed', ({ triggerId, expectedAt }) => {
-  metrics.increment('schedule.missed', { triggerId });
+const triggers = new TriggerService(store, engine, {
+  http: { app, framework: 'express', basePath: '/webhooks' },
 });
 ```
 
-## Database Schema
+#### Fastify
 
-```sql
-CREATE TABLE fm_triggers (
-  id              TEXT PRIMARY KEY,
-  type            TEXT NOT NULL CHECK (type IN ('http', 'schedule')),
-  name            TEXT NOT NULL,
-  description     TEXT,
-  flow_id         TEXT NOT NULL,
-  enabled         BOOLEAN NOT NULL DEFAULT true,
-  config          JSONB NOT NULL,
-  last_run_at     BIGINT,
-  next_run_at     BIGINT,
-  created_at      BIGINT NOT NULL,
-  updated_at      BIGINT NOT NULL
-);
+```typescript
+import Fastify from 'fastify';
 
-CREATE INDEX idx_triggers_flow ON fm_triggers(flow_id);
-CREATE INDEX idx_triggers_enabled ON fm_triggers(enabled) WHERE enabled = true;
-CREATE INDEX idx_triggers_next_run ON fm_triggers(next_run_at) WHERE type = 'schedule';
+const app = Fastify();
+
+const triggers = new TriggerService(store, engine, {
+  http: { app, framework: 'fastify', basePath: '/webhooks' },
+});
+```
+
+#### Hono
+
+```typescript
+import { Hono } from 'hono';
+
+const app = new Hono();
+
+const triggers = new TriggerService(store, engine, {
+  http: { app, framework: 'hono', basePath: '/webhooks' },
+});
+```
+
+#### Koa
+
+```typescript
+import Koa from 'koa';
+import Router from '@koa/router';
+
+const app = new Koa();
+const router = new Router();
+
+const triggers = new TriggerService(store, engine, {
+  http: { app: router, framework: 'koa', basePath: '/webhooks' },
+});
+
+app.use(router.routes());
+```
+
+## Schedule Triggers
+
+Schedule triggers start workflows on cron schedules.
+
+### Cron Expressions
+
+Standard cron format with optional seconds:
+
+```
+┌─────────── second (0-59) [optional]
+│ ┌───────── minute (0-59)
+│ │ ┌─────── hour (0-23)
+│ │ │ ┌───── day of month (1-31)
+│ │ │ │ ┌─── month (1-12 or JAN-DEC)
+│ │ │ │ │ ┌─ day of week (0-6 or SUN-SAT)
+│ │ │ │ │ │
+* * * * * *
+```
+
+Examples:
+
+```typescript
+// Every minute
+await triggers.register({
+  id: 'every-minute',
+  type: 'schedule',
+  flowId: 'health-check',
+  schedule: '* * * * *',
+});
+
+// Every hour at minute 0
+await triggers.register({
+  id: 'hourly',
+  type: 'schedule',
+  flowId: 'hourly-sync',
+  schedule: '0 * * * *',
+});
+
+// Daily at 9am
+await triggers.register({
+  id: 'daily-9am',
+  type: 'schedule',
+  flowId: 'daily-report',
+  schedule: '0 9 * * *',
+});
+
+// Every Monday at 8am
+await triggers.register({
+  id: 'weekly-monday',
+  type: 'schedule',
+  flowId: 'weekly-digest',
+  schedule: '0 8 * * 1',
+});
+
+// First day of every month at midnight
+await triggers.register({
+  id: 'monthly',
+  type: 'schedule',
+  flowId: 'monthly-billing',
+  schedule: '0 0 1 * *',
+});
+
+// Every 15 minutes
+await triggers.register({
+  id: 'every-15-min',
+  type: 'schedule',
+  flowId: 'queue-processor',
+  schedule: '*/15 * * * *',
+});
+
+// Weekdays at 6pm
+await triggers.register({
+  id: 'weekday-evening',
+  type: 'schedule',
+  flowId: 'end-of-day',
+  schedule: '0 18 * * 1-5',
+});
+```
+
+### Timezones
+
+Specify timezone for schedule interpretation:
+
+```typescript
+await triggers.register({
+  id: 'daily-report-nyc',
+  type: 'schedule',
+  flowId: 'generate-report',
+  schedule: '0 9 * * *',      // 9am
+  timezone: 'America/New_York', // In Eastern Time
+});
+
+await triggers.register({
+  id: 'daily-report-london',
+  type: 'schedule',
+  flowId: 'generate-report',
+  schedule: '0 9 * * *',      // 9am
+  timezone: 'Europe/London',    // In UK Time
+});
+```
+
+If timezone is not specified, the service default is used (configurable, defaults to UTC).
+
+### Static Context
+
+Provide static data to scheduled workflows:
+
+```typescript
+await triggers.register({
+  id: 'daily-sales-report',
+  type: 'schedule',
+  flowId: 'generate-report',
+  schedule: '0 8 * * *',
+  timezone: 'America/Chicago',
+  staticContext: {
+    reportType: 'sales',
+    period: 'daily',
+    recipients: ['sales@company.com', 'manager@company.com'],
+  },
+});
+```
+
+The workflow starts with context:
+
+```typescript
+{
+  reportType: 'sales',
+  period: 'daily',
+  recipients: ['sales@company.com', 'manager@company.com'],
+  _trigger: {
+    id: 'daily-sales-report',
+    type: 'schedule',
+    scheduledAt: 1706500000000,
+    firedAt: 1706500001234,
+  },
+}
+```
+
+## Trigger Management
+
+### Listing Triggers
+
+```typescript
+// Get all triggers
+const allTriggers = await triggers.list();
+
+// Filter by type
+const httpTriggers = await triggers.list({ type: 'http' });
+const scheduleTriggers = await triggers.list({ type: 'schedule' });
+
+// Filter by flow
+const orderTriggers = await triggers.list({ flowId: 'process-order' });
+```
+
+### Updating Triggers
+
+```typescript
+// Disable a trigger
+await triggers.update('order-webhook', { enabled: false });
+
+// Update schedule
+await triggers.update('daily-report', {
+  schedule: '0 10 * * *', // Changed to 10am
+});
+
+// Update input schema
+await triggers.update('user-signup', {
+  inputSchema: {
+    type: 'object',
+    properties: {
+      email: { type: 'string', format: 'email' },
+      name: { type: 'string' },
+      company: { type: 'string' }, // New field
+    },
+    required: ['email', 'name'],
+  },
+});
+```
+
+### Deleting Triggers
+
+```typescript
+// Delete a trigger
+await triggers.delete('old-webhook');
+
+// Delete removes route/schedule automatically
+```
+
+### Manual Trigger Execution
+
+```typescript
+// Fire a trigger manually (useful for testing)
+const execution = await triggers.fire('daily-report', {
+  // Optional override context
+  testMode: true,
+});
+```
+
+## Storage
+
+### PgTriggerStore
+
+Store triggers in PostgreSQL:
+
+```typescript
+import { PgTriggerStore } from '@flowmonkey/triggers';
+
+const triggerStore = new PgTriggerStore(pool);
+
+// The store creates this table:
+// CREATE TABLE fm_triggers (
+//   id TEXT PRIMARY KEY,
+//   type TEXT NOT NULL,
+//   name TEXT,
+//   flow_id TEXT NOT NULL,
+//   enabled BOOLEAN DEFAULT true,
+//   config JSONB,
+//   created_at BIGINT,
+//   updated_at BIGINT
+// );
+```
+
+### MemoryTriggerStore
+
+For testing:
+
+```typescript
+import { MemoryTriggerStore } from '@flowmonkey/triggers';
+
+const triggerStore = new MemoryTriggerStore();
+```
+
+## API Reference
+
+### TriggerService
+
+```typescript
+class TriggerService {
+  constructor(
+    store: TriggerStore,
+    engine: Engine,
+    options?: TriggerServiceOptions
+  );
+
+  // Register a new trigger
+  register(trigger: CreateTrigger): Promise<Trigger>;
+
+  // Update an existing trigger
+  update(id: string, updates: Partial<Trigger>): Promise<Trigger>;
+
+  // Delete a trigger
+  delete(id: string): Promise<void>;
+
+  // Get a trigger by ID
+  get(id: string): Promise<Trigger | undefined>;
+
+  // List triggers
+  list(filter?: TriggerFilter): Promise<Trigger[]>;
+
+  // Manually fire a trigger
+  fire(id: string, contextOverride?: object): Promise<Execution>;
+
+  // Shutdown (stops scheduler)
+  shutdown(): Promise<void>;
+}
+
+interface TriggerServiceOptions {
+  http?: {
+    app: any;
+    framework: 'express' | 'fastify' | 'hono' | 'koa';
+    basePath?: string;
+    middleware?: any[];
+  };
+  schedule?: {
+    enabled: boolean;
+    timezone?: string;
+    checkInterval?: number;
+  };
+}
+```
+
+### Trigger Types
+
+```typescript
+interface BaseTrigger {
+  id: string;
+  name?: string;
+  flowId: string;
+  enabled: boolean;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+interface HttpTrigger extends BaseTrigger {
+  type: 'http';
+  inputSchema?: JSONSchema;
+  contextKey?: string;
+  config?: {
+    signatureHeader?: string;
+    signatureSecret?: string;
+    signatureAlgorithm?: string;
+  };
+}
+
+interface ScheduleTrigger extends BaseTrigger {
+  type: 'schedule';
+  schedule: string;          // Cron expression
+  timezone?: string;
+  staticContext?: object;
+  lastRunAt?: number;
+  nextRunAt?: number;
+}
+
+type Trigger = HttpTrigger | ScheduleTrigger;
+```
+
+### Creating Triggers
+
+```typescript
+interface CreateHttpTrigger {
+  type: 'http';
+  name?: string;
+  flowId: string;
+  enabled?: boolean;
+  inputSchema?: JSONSchema;
+  contextKey?: string;
+  config?: object;
+}
+
+interface CreateScheduleTrigger {
+  type: 'schedule';
+  name?: string;
+  flowId: string;
+  enabled?: boolean;
+  schedule: string;
+  timezone?: string;
+  staticContext?: object;
+}
+
+type CreateTrigger = CreateHttpTrigger | CreateScheduleTrigger;
+```
+
+### TriggerStore Interface
+
+```typescript
+interface TriggerStore {
+  create(trigger: Trigger): Promise<void>;
+  get(id: string): Promise<Trigger | undefined>;
+  update(id: string, trigger: Partial<Trigger>): Promise<void>;
+  delete(id: string): Promise<void>;
+  list(filter?: TriggerFilter): Promise<Trigger[]>;
+  findSchedulesDue(before: number): Promise<ScheduleTrigger[]>;
+  updateLastRun(id: string, timestamp: number): Promise<void>;
+}
+
+interface TriggerFilter {
+  type?: 'http' | 'schedule';
+  flowId?: string;
+  enabled?: boolean;
+}
 ```
 
 ## License

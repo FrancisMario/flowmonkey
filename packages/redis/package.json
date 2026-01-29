@@ -1,6 +1,6 @@
 {
   "name": "@flowmonkey/redis",
-  "version": "1.0.1",
+  "version": "0.0.1",
   "description": "Redis adapters for FlowMonkey distributed coordination",
   "type": "module",
   "main": "./dist/index.cjs",

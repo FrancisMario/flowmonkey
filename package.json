@@ -1,13 +1,13 @@
 {
   "name": "flowmonkey",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.0.0",
   "description": "Minimal workflow execution engine",
   "author": "FlowMonkey Contributors",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/flowmonkey/flowmonkey.git"
+    "url": "https://github.com/francismario/flowmonkey.git"
   },
   "scripts": {
     "build": "pnpm -r build",

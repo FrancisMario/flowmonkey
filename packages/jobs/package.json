@@ -1,6 +1,6 @@
 {
   "name": "@flowmonkey/jobs",
-  "version": "1.0.1",
+  "version": "0.0.1",
   "description": "Job runner for FlowMonkey stateful handlers",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -30,10 +30,12 @@
     "clean": "rm -rf dist"
   },
   "peerDependencies": {
-    "@flowmonkey/core": "^1.0.0"
+    "@flowmonkey/core": "^1.0.0",
+    "@flowmonkey/postgres": "^1.0.0"
   },
   "devDependencies": {
     "@flowmonkey/core": "workspace:*",
+    "@flowmonkey/postgres": "workspace:*",
     "@types/node": "^20.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.4.0",

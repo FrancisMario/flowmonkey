@@ -1,17 +1,36 @@
 import type { StepHandler } from './step-handler';
+import type { BaseHandler } from '../handlers/base';
+
+/**
+ * Constructor type for class-based handlers.
+ */
+export type HandlerConstructor<T extends BaseHandler = BaseHandler> = new () => T;
+
+/**
+ * A handler can be either:
+ * - A class-based handler (constructor extending BaseHandler)
+ * - A legacy StepHandler object (for backward compatibility during migration)
+ */
+export type HandlerLike = HandlerConstructor | StepHandler;
 
 /**
  * Registry of step handlers.
  */
 export interface HandlerRegistry {
-  /** Register a handler */
-  register(handler: StepHandler): void;
+  /** Register a handler (class constructor or legacy object) */
+  register(handler: HandlerLike): void;
 
   /** Register multiple handlers */
-  registerAll(handlers: StepHandler[]): void;
+  registerAll(handlers: HandlerLike[]): void;
 
-  /** Get handler by type */
+  /** Get handler by type (always returns instance or legacy handler) */
   get(type: string): StepHandler | undefined;
+
+  /** Get handler constructor by type (for class-based handlers) */
+  getConstructor(type: string): HandlerConstructor | undefined;
+
+  /** Check if handler is class-based */
+  isClassBased(type: string): boolean;
 
   /** Check if type is registered */
   has(type: string): boolean;

@@ -28,7 +28,7 @@ export class PgTriggerStore implements TriggerStore {
   constructor(private pool: Pool) {}
 
   async create(data: CreateTrigger): Promise<Trigger> {
-    const id = `trg_${generateId().slice(0, 12)}`;
+    const id = data.id ?? `trg_${generateId().slice(0, 12)}`;
     const now = Date.now();
 
     let nextRunAt: number | undefined;
@@ -141,6 +141,7 @@ export class PgTriggerStore implements TriggerStore {
     flowId?: string;
     type?: 'http' | 'schedule';
     enabled?: boolean;
+    tenantId?: string;
   }): Promise<Trigger[]> {
     const conditions: string[] = [];
     const params: unknown[] = [];
@@ -157,6 +158,10 @@ export class PgTriggerStore implements TriggerStore {
     if (options?.enabled !== undefined) {
       conditions.push(`enabled = $${paramIndex++}`);
       params.push(options.enabled);
+    }
+    if (options?.tenantId !== undefined) {
+      conditions.push(`tenant_id = $${paramIndex++}`);
+      params.push(options.tenantId);
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -322,7 +327,7 @@ export class MemoryTriggerStore implements TriggerStore {
   private historyId = 0;
 
   async create(data: CreateTrigger): Promise<Trigger> {
-    const id = `trg_${generateId().slice(0, 12)}`;
+    const id = data.id ?? `trg_${generateId().slice(0, 12)}`;
     const now = Date.now();
 
     let nextRunAt: number | undefined;
@@ -373,6 +378,7 @@ export class MemoryTriggerStore implements TriggerStore {
     flowId?: string;
     type?: 'http' | 'schedule';
     enabled?: boolean;
+    tenantId?: string;
   }): Promise<Trigger[]> {
     let results = [...this.triggers.values()];
 
@@ -384,6 +390,9 @@ export class MemoryTriggerStore implements TriggerStore {
     }
     if (options?.enabled !== undefined) {
       results = results.filter((t) => t.enabled === options.enabled);
+    }
+    if (options?.tenantId !== undefined) {
+      results = results.filter((t) => t.tenantId === options.tenantId);
     }
 
     return results.sort((a, b) => b.createdAt - a.createdAt);

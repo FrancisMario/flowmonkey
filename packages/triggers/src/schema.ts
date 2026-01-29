@@ -1,4 +1,4 @@
-export const TRIGGER_SCHEMA_VERSION = '0.0.1';
+export const TRIGGER_SCHEMA_VERSION = '0.1.0';
 
 export const triggerSchema = `
 -- ============================================
@@ -13,6 +13,9 @@ CREATE TABLE IF NOT EXISTS fm_triggers (
   flow_id         TEXT NOT NULL,
   type            TEXT NOT NULL CHECK (type IN ('http', 'schedule')),
   enabled         BOOLEAN NOT NULL DEFAULT true,
+  
+  -- Multi-tenancy
+  tenant_id       TEXT,
   
   -- HTTP triggers
   input_schema    JSONB,
@@ -37,6 +40,7 @@ CREATE INDEX IF NOT EXISTS idx_fm_triggers_type ON fm_triggers(type);
 CREATE INDEX IF NOT EXISTS idx_fm_triggers_enabled ON fm_triggers(enabled) WHERE enabled = true;
 CREATE INDEX IF NOT EXISTS idx_fm_triggers_next_run ON fm_triggers(next_run_at) 
   WHERE type = 'schedule' AND enabled = true;
+CREATE INDEX IF NOT EXISTS idx_fm_triggers_tenant ON fm_triggers(tenant_id) WHERE tenant_id IS NOT NULL;
 
 -- Trigger History
 CREATE TABLE IF NOT EXISTS fm_trigger_history (
@@ -74,9 +78,26 @@ CREATE INDEX IF NOT EXISTS idx_fm_trigger_history_exec ON fm_trigger_history(exe
 `;
 
 /**
+ * Migration script for v0.1.0 - Add tenant_id support
+ */
+export const triggerMigrationV010 = `
+-- Add tenant_id column for multi-tenancy
+ALTER TABLE fm_triggers ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_fm_triggers_tenant ON fm_triggers(tenant_id) WHERE tenant_id IS NOT NULL;
+`;
+
+/**
  * Apply trigger schema to database.
  * @param pool - PostgreSQL pool (from 'pg' package)
  */
 export async function applyTriggerSchema(pool: { query: (sql: string) => Promise<unknown> }): Promise<void> {
   await pool.query(triggerSchema);
+}
+
+/**
+ * Apply trigger migration v0.1.0 (tenant support)
+ * @param pool - PostgreSQL pool (from 'pg' package)
+ */
+export async function applyTriggerMigrationV010(pool: { query: (sql: string) => Promise<unknown> }): Promise<void> {
+  await pool.query(triggerMigrationV010);
 }

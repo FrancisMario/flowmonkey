@@ -25,7 +25,16 @@ export { handleTrigger, clearSchemaCache, type TriggerHandlerDeps, type RequestM
 export { ScheduleRunner, type ScheduleRunnerOptions, type ScheduleRunnerDeps } from './schedule-runner';
 
 // Unified Service
-export { TriggerService, type TriggerServiceOptions } from './trigger-service';
+export {
+  TriggerService,
+  type TriggerServiceOptions,
+  type TriggerServiceConfig,
+  type HttpAdapterConfig,
+  type ScheduleAdapterConfig,
+  type FireResult,
+  type TriggerFilter,
+  type TriggerServiceEvents,
+} from './trigger-service';
 
 // Schema
-export { triggerSchema, applyTriggerSchema, TRIGGER_SCHEMA_VERSION } from './schema';
+export { triggerSchema, applyTriggerSchema, applyTriggerMigrationV010, TRIGGER_SCHEMA_VERSION } from './schema';

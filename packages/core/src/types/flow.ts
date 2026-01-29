@@ -1,4 +1,25 @@
 /**
+ * Flow status for draft/publish lifecycle.
+ */
+export type FlowStatus = 'draft' | 'published' | 'archived';
+
+/**
+ * Visual metadata for editor positioning.
+ */
+export interface FlowVisualMetadata {
+  /** Node positions by step ID */
+  nodes: Record<string, { x: number; y: number; width?: number; height?: number }>;
+  /** Canvas state */
+  canvas?: {
+    zoom: number;
+    offsetX: number;
+    offsetY: number;
+  };
+  /** Optional styling overrides by step */
+  styles?: Record<string, { color?: string; icon?: string }>;
+}
+
+/**
  * A Flow is a predefined workflow definition.
  */
 export interface Flow {
@@ -16,6 +37,18 @@ export interface Flow {
 
   /** Step definitions */
   readonly steps: Record<string, Step>;
+
+  /** Flow lifecycle status (defaults to 'published' for backward compatibility) */
+  readonly status?: FlowStatus;
+
+  /** Visual editor metadata (node positions, canvas state) */
+  readonly visual?: FlowVisualMetadata;
+
+  /** Description for documentation/UI */
+  readonly description?: string;
+
+  /** Tags for organization/filtering */
+  readonly tags?: string[];
 }
 
 /**

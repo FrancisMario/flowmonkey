@@ -29,6 +29,8 @@ export interface HandlerMetadata {
   description?: string;
   category?: 'control' | 'data' | 'external' | 'ai' | 'utility';
   stateful?: boolean;
+  version?: string;
+  deprecated?: boolean | { since: string; message?: string; useInstead?: string };
   visual?: { icon?: string; color?: string; tags?: string[] };
   configSchema: JSONSchema;
   inputSchema?: JSONSchema;

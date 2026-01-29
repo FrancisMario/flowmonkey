@@ -30,6 +30,8 @@ export interface BaseTrigger {
   enabled: boolean;
   createdAt: number;
   updatedAt: number;
+  /** Tenant ID for multi-tenant isolation */
+  tenantId?: string;
 }
 
 /**
@@ -156,6 +158,7 @@ export interface TriggerStore {
     flowId?: string;
     type?: 'http' | 'schedule';
     enabled?: boolean;
+    tenantId?: string;
   }): Promise<Trigger[]>;
   listDueSchedules(now: number): Promise<ScheduleTrigger[]>;
 
@@ -187,16 +190,17 @@ export interface TriggerResult {
 }
 
 /**
- * Input for creating an HTTP trigger.
+ * Input for creating an HTTP trigger (id is optional, auto-generated if not provided).
  */
-export type CreateHttpTrigger = Omit<HttpTrigger, 'id' | 'createdAt' | 'updatedAt'>;
+export type CreateHttpTrigger = Omit<HttpTrigger, 'id' | 'createdAt' | 'updatedAt'> & { id?: string };
 
 /**
- * Input for creating a schedule trigger.
+ * Input for creating a schedule trigger (id is optional, auto-generated if not provided).
  */
-export type CreateScheduleTrigger = Omit<ScheduleTrigger, 'id' | 'createdAt' | 'updatedAt' | 'lastRunAt' | 'nextRunAt'>;
+export type CreateScheduleTrigger = Omit<ScheduleTrigger, 'id' | 'createdAt' | 'updatedAt' | 'lastRunAt' | 'nextRunAt'> & { id?: string };
 
 /**
  * Input for creating any trigger.
  */
 export type CreateTrigger = CreateHttpTrigger | CreateScheduleTrigger;
+

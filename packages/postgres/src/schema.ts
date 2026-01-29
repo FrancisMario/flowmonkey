@@ -48,12 +48,17 @@ CREATE TABLE IF NOT EXISTS fm_flows (
   id              TEXT NOT NULL,
   version         TEXT NOT NULL,
   name            TEXT,
+  description     TEXT,
+  status          TEXT DEFAULT 'published' CHECK (status IN ('draft', 'published', 'archived')),
+  tags            JSONB,
+  visual          JSONB,
   definition      JSONB NOT NULL,
   created_at      BIGINT NOT NULL,
   PRIMARY KEY (id, version)
 );
 
 CREATE INDEX IF NOT EXISTS idx_fm_flows_id ON fm_flows(id);
+CREATE INDEX IF NOT EXISTS idx_fm_flows_status ON fm_flows(status);
 
 -- Flow versions (for version pinning)
 CREATE TABLE IF NOT EXISTS fm_flow_versions (
@@ -84,6 +89,10 @@ CREATE TABLE IF NOT EXISTS fm_jobs (
   max_attempts    INTEGER NOT NULL DEFAULT 3,
   created_at      BIGINT NOT NULL,
   updated_at      BIGINT NOT NULL,
+  -- Checkpoint and progress support (v0.2.0)
+  instance_id     TEXT,           -- Unique ID for the current execution attempt
+  checkpoint      JSONB,          -- Handler checkpoint data
+  progress        JSONB,          -- Progress info { percent: number, message?: string }
   
   CONSTRAINT fk_job_execution FOREIGN KEY (execution_id) 
     REFERENCES fm_executions(id) ON DELETE CASCADE
@@ -93,6 +102,7 @@ CREATE INDEX IF NOT EXISTS idx_fm_jobs_exec ON fm_jobs(execution_id);
 CREATE INDEX IF NOT EXISTS idx_fm_jobs_status ON fm_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_fm_jobs_stalled ON fm_jobs(heartbeat_at) WHERE status = 'running';
 CREATE INDEX IF NOT EXISTS idx_fm_jobs_step ON fm_jobs(execution_id, step_id);
+CREATE INDEX IF NOT EXISTS idx_fm_jobs_instance ON fm_jobs(instance_id) WHERE instance_id IS NOT NULL;
 
 -- Events (audit log / observability)
 CREATE TABLE IF NOT EXISTS fm_events (
@@ -256,6 +266,34 @@ $$ LANGUAGE plpgsql;
 `;
 
 /**
+ * Migration script for v0.2.0 - Add checkpoint and progress support to jobs
+ */
+export const migrationV020 = `
+-- Add checkpoint and progress columns to fm_jobs
+ALTER TABLE fm_jobs ADD COLUMN IF NOT EXISTS instance_id TEXT;
+ALTER TABLE fm_jobs ADD COLUMN IF NOT EXISTS checkpoint JSONB;
+ALTER TABLE fm_jobs ADD COLUMN IF NOT EXISTS progress JSONB;
+
+-- Add index for instance_id
+CREATE INDEX IF NOT EXISTS idx_fm_jobs_instance ON fm_jobs(instance_id) WHERE instance_id IS NOT NULL;
+`;
+
+/**
+ * Migration script for v0.3.0 - Add visual editor support to flows
+ */
+export const migrationV030 = `
+-- Add visual editor columns to fm_flows
+ALTER TABLE fm_flows ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE fm_flows ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'published';
+ALTER TABLE fm_flows ADD COLUMN IF NOT EXISTS tags JSONB;
+ALTER TABLE fm_flows ADD COLUMN IF NOT EXISTS visual JSONB;
+
+-- Add status constraint (do it in two steps to avoid issues)
+-- Note: status check constraint should be added manually if needed
+CREATE INDEX IF NOT EXISTS idx_fm_flows_status ON fm_flows(status);
+`;
+
+/**
  * Apply schema to database.
  */
 export async function applySchema(pool: Pool): Promise<void> {
@@ -267,4 +305,18 @@ export async function applySchema(pool: Pool): Promise<void> {
  */
 export async function applyMigrationV010(pool: Pool): Promise<void> {
   await pool.query(migrationV010);
+}
+
+/**
+ * Apply migration for v0.2.0 (checkpoint/progress support)
+ */
+export async function applyMigrationV020(pool: Pool): Promise<void> {
+  await pool.query(migrationV020);
+}
+
+/**
+ * Apply migration for v0.3.0 (visual editor support for flows)
+ */
+export async function applyMigrationV030(pool: Pool): Promise<void> {
+  await pool.query(migrationV030);
 }

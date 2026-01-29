@@ -5,7 +5,12 @@ import { createHash } from 'crypto';
 // Types
 // ============================================
 
-export type JobStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+export interface JobProgress {
+  percent: number;
+  message?: string;
+}
 
 export interface Job {
   id: string;
@@ -23,6 +28,10 @@ export interface Job {
   maxAttempts: number;
   createdAt: number;
   updatedAt: number;
+  // Checkpoint and progress support
+  instanceId?: string;
+  checkpoint?: unknown;
+  progress?: JobProgress;
 }
 
 export interface JobError {
@@ -77,6 +86,41 @@ export interface JobStore {
 
   /** List jobs for execution */
   listForExecution(executionId: string): Promise<Job[]>;
+
+  // ── Checkpoint and Progress Methods ─────────────────────────────
+
+  /**
+   * Claim job with a new instance ID.
+   * Returns the instance ID if successful, null otherwise.
+   */
+  claimWithInstance(jobId: string, runnerId: string, instanceId: string): Promise<boolean>;
+
+  /**
+   * Save checkpoint data for a job.
+   * Only succeeds if instanceId matches the current owner.
+   */
+  saveCheckpoint(jobId: string, instanceId: string, data: unknown): Promise<boolean>;
+
+  /**
+   * Get checkpoint data for a job.
+   */
+  getCheckpoint(jobId: string): Promise<unknown | null>;
+
+  /**
+   * Update progress for a job.
+   * Only succeeds if instanceId matches the current owner.
+   */
+  updateProgress(jobId: string, instanceId: string, progress: JobProgress): Promise<boolean>;
+
+  /**
+   * Check if the given instanceId is still the active owner of the job.
+   */
+  isInstanceActive(jobId: string, instanceId: string): Promise<boolean>;
+
+  /**
+   * Get the current instance ID for a job.
+   */
+  getInstanceId(jobId: string): Promise<string | null>;
 }
 
 // ============================================
@@ -225,6 +269,84 @@ export class PgJobStore implements JobStore {
     return rows.map((r: any) => this.toJob(r));
   }
 
+  // ── Checkpoint and Progress Methods ─────────────────────────────
+
+  async claimWithInstance(jobId: string, runnerId: string, instanceId: string): Promise<boolean> {
+    const now = Date.now();
+    const { rowCount } = await this.pool.query(
+      `UPDATE fm_jobs SET
+        status = 'running',
+        runner_id = $2,
+        instance_id = $3,
+        heartbeat_at = $4,
+        attempts = attempts + 1,
+        updated_at = $4,
+        progress = NULL
+       WHERE id = $1
+         AND status = 'pending'
+         AND attempts < max_attempts`,
+      [jobId, runnerId, instanceId, now]
+    );
+    return (rowCount ?? 0) > 0;
+  }
+
+  async saveCheckpoint(jobId: string, instanceId: string, data: unknown): Promise<boolean> {
+    const now = Date.now();
+    const { rowCount } = await this.pool.query(
+      `UPDATE fm_jobs SET
+        checkpoint = $3,
+        heartbeat_at = $4,
+        updated_at = $4
+       WHERE id = $1
+         AND instance_id = $2
+         AND status = 'running'`,
+      [jobId, instanceId, JSON.stringify(data), now]
+    );
+    return (rowCount ?? 0) > 0;
+  }
+
+  async getCheckpoint(jobId: string): Promise<unknown | null> {
+    const { rows } = await this.pool.query(
+      `SELECT checkpoint FROM fm_jobs WHERE id = $1`,
+      [jobId]
+    );
+    return rows[0]?.checkpoint ?? null;
+  }
+
+  async updateProgress(jobId: string, instanceId: string, progress: JobProgress): Promise<boolean> {
+    const now = Date.now();
+    const { rowCount } = await this.pool.query(
+      `UPDATE fm_jobs SET
+        progress = $3,
+        heartbeat_at = $4,
+        updated_at = $4
+       WHERE id = $1
+         AND instance_id = $2
+         AND status = 'running'`,
+      [jobId, instanceId, JSON.stringify(progress), now]
+    );
+    return (rowCount ?? 0) > 0;
+  }
+
+  async isInstanceActive(jobId: string, instanceId: string): Promise<boolean> {
+    const { rows } = await this.pool.query(
+      `SELECT 1 FROM fm_jobs
+       WHERE id = $1
+         AND instance_id = $2
+         AND status = 'running'`,
+      [jobId, instanceId]
+    );
+    return rows.length > 0;
+  }
+
+  async getInstanceId(jobId: string): Promise<string | null> {
+    const { rows } = await this.pool.query(
+      `SELECT instance_id FROM fm_jobs WHERE id = $1`,
+      [jobId]
+    );
+    return rows[0]?.instance_id ?? null;
+  }
+
   /**
    * Deterministic job ID ensures idempotency.
    * Same execution + step + handler + input = same job ID.
@@ -256,6 +378,10 @@ export class PgJobStore implements JobStore {
       maxAttempts: row.max_attempts,
       createdAt: Number(row.created_at),
       updatedAt: Number(row.updated_at),
+      // Checkpoint and progress
+      instanceId: row.instance_id ?? undefined,
+      checkpoint: row.checkpoint ?? undefined,
+      progress: row.progress ?? undefined,
     };
   }
 }
