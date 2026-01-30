@@ -1,0 +1,31 @@
+/* FlowMonkey custom styles */
+
+:root {
+  --sl-color-accent-low: #1a365d;
+  --sl-color-accent: #3182ce;
+  --sl-color-accent-high: #63b3ed;
+  --sl-color-white: #fff;
+  --sl-color-gray-1: #eceef2;
+  --sl-color-gray-2: #c0c2c7;
+  --sl-color-gray-3: #888b96;
+  --sl-color-gray-4: #545861;
+  --sl-color-gray-5: #353841;
+  --sl-color-gray-6: #24272f;
+  --sl-color-black: #17181c;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #e6f2ff;
+  --sl-color-accent: #3182ce;
+  --sl-color-accent-high: #1a365d;
+}
+
+/* Code block styling */
+.expressive-code pre {
+  border-radius: 8px;
+}
+
+/* Logo sizing */
+.site-title img {
+  max-height: 2.5rem;
+}

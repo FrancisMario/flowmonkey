@@ -22,7 +22,10 @@
     "release:dry": "pnpm build && pnpm test && pnpm -r publish --access public --dry-run",
     "version:patch": "pnpm -r exec -- npm version patch --no-git-tag-version",
     "version:minor": "pnpm -r exec -- npm version minor --no-git-tag-version",
-    "version:major": "pnpm -r exec -- npm version major --no-git-tag-version"
+    "version:major": "pnpm -r exec -- npm version major --no-git-tag-version",
+    "docs:dev": "cd docs && pnpm dev",
+    "docs:build": "cd docs && pnpm build",
+    "docs:preview": "cd docs && pnpm preview"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^2.0.0",

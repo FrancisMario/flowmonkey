@@ -1,0 +1,77 @@
+---
+title: Welcome to FlowMonkey
+description: A minimal, production-ready workflow execution engine for TypeScript/Node.js.
+template: splash
+hero:
+  tagline: A minimal, production-ready workflow execution engine for TypeScript/Node.js
+  image:
+    file: ../../assets/mascot.png
+  actions:
+    - text: Get Started
+      link: /getting-started/introduction/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/francismario/flowmonkey
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Features
+
+<CardGrid stagger>
+  <Card title="Stateless Engine" icon="rocket">
+    Horizontal scaling without coordination. Deploy multiple instances safely.
+  </Card>
+  <Card title="Pluggable Storage" icon="document">
+    Memory, PostgreSQL, Redis support. Choose what fits your stack.
+  </Card>
+  <Card title="Durable Execution" icon="approve-check">
+    Survives restarts and supports long-running workflows with persistence.
+  </Card>
+  <Card title="Async & Wait" icon="puzzle">
+    Built-in pause/resume with wake scheduling for human-in-the-loop workflows.
+  </Card>
+  <Card title="Extensible Handlers" icon="setting">
+    HTTP, delay, LLM, webhooks, and easy custom handler development.
+  </Card>
+  <Card title="Triggers" icon="forward-slash">
+    HTTP webhooks, cron schedules, and event-driven triggers out of the box.
+  </Card>
+</CardGrid>
+
+## Quick Example
+
+```typescript
+import { Engine, DefaultFlowRegistry, DefaultHandlerRegistry, MemoryStore, Result } from '@flowmonkey/core';
+
+// Define a simple handler
+const greetHandler = {
+  type: 'greet',
+  async execute({ input }) {
+    return Result.success({ message: `Hello, ${input.name}!` });
+  },
+};
+
+// Define a flow
+const flow = {
+  id: 'greeting',
+  version: '1.0.0',
+  initialStepId: 'say-hello',
+  steps: {
+    'say-hello': {
+      id: 'say-hello',
+      type: 'greet',
+      input: { type: 'key', key: 'user' },
+      outputKey: 'greeting',
+      transitions: { onSuccess: null },
+    },
+  },
+};
+
+// Run it
+const engine = new Engine(new MemoryStore(), handlers, flows);
+const { execution } = await engine.create('greeting', { user: { name: 'World' } });
+await engine.run(execution.id);
+```

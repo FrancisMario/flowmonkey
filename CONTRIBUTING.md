@@ -23,7 +23,7 @@ Thank you for your interest in contributing to FlowMonkey! This guide will help 
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourorg/flowmonkey.git
+git clone https://github.com/francismario/flowmonkey.git
 cd flowmonkey
 
 # Install dependencies
