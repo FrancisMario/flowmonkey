@@ -30,6 +30,13 @@ export const ServiceTokens = {
 
   // Express
   ExpressApp: Symbol.for('fm:ExpressApp'),
+
+  // DataStore — Tables
+  TableRegistry: Symbol.for('fm:TableRegistry'),
+  TableStore: Symbol.for('fm:TableStore'),
+  PoolProvider: Symbol.for('fm:PoolProvider'),
+  WriteAheadLog: Symbol.for('fm:WriteAheadLog'),
+  DDLProvider: Symbol.for('fm:DDLProvider'),
 } as const;
 
 export type ServiceToken = (typeof ServiceTokens)[keyof typeof ServiceTokens];

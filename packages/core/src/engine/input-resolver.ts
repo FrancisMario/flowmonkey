@@ -30,7 +30,7 @@ export function resolveInput(selector: InputSelector, context: Record<string, un
   }
 }
 
-function getPath(obj: unknown, path: string): unknown {
+export function getPath(obj: unknown, path: string): unknown {
   let current: any = obj;
   for (const part of path.split('.')) {
     if (current == null) return undefined;

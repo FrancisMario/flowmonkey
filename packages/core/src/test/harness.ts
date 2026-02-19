@@ -23,10 +23,19 @@ import { Engine, type TickResult, type CreateResult, type CreateOptions } from '
 import { MemoryStore } from '../impl/memory-store';
 import { DefaultHandlerRegistry } from '../impl/handler-registry';
 import { DefaultFlowRegistry } from '../impl/flow-registry';
+import { MemoryTableRegistry } from '../impl/memory-table-registry';
+import { MemoryTableStore } from '../impl/memory-table-store';
+import { EventEmittingTableStore } from '../impl/event-emitting-table-store';
+import { EventEmittingTableRegistry } from '../impl/event-emitting-table-registry';
+import { EventEmittingFlowRegistry } from '../impl/event-emitting-flow-registry';
+import { EventEmittingHandlerRegistry } from '../impl/event-emitting-handler-registry';
+import { EventEmittingWAL } from '../impl/event-emitting-wal';
+import { MemoryWAL } from '../impl/memory-wal';
+import { EventDispatcher } from '../impl/event-dispatcher';
 import type { Flow } from '../types/flow';
+import type { TableDef } from '../types/table';
 import type { Execution } from '../types/execution';
 import type { StepHandler } from '../interfaces/step-handler';
-import type { EventBus } from '../interfaces/event-bus';
 
 /** Options for creating a TestHarness instance. */
 export interface TestHarnessOptions {
@@ -38,6 +47,10 @@ export interface TestHarnessOptions {
   recordHistory?: boolean;
   /** Maximum steps before failing (default: 100) */
   maxSteps?: number;
+  /** Tables to pre-register for pipe testing */
+  tables?: TableDef[];
+  /** Enable table/pipe support (auto-enabled if tables provided) */
+  enableTables?: boolean;
 }
 
 /** Result of running a flow to completion. */
@@ -60,29 +73,59 @@ export class TestHarness {
   readonly flows: DefaultFlowRegistry;
   readonly engine: Engine;
   readonly events: any[] = [];
+  readonly tableRegistry: MemoryTableRegistry;
+  readonly tableStore: MemoryTableStore;
+  readonly wal: MemoryWAL;
+  /** EventDispatcher — use .on() for typed subscriptions in tests */
+  readonly dispatcher: EventDispatcher;
+  private readonly _eventEmittingTableStore: EventEmittingTableStore;
+  private readonly _eventEmittingTableRegistry: EventEmittingTableRegistry;
+  private readonly _eventEmittingWAL: EventEmittingWAL;
 
   constructor(options: TestHarnessOptions = {}) {
     this.store = new MemoryStore();
     this.handlers = new DefaultHandlerRegistry();
     this.flows = new DefaultFlowRegistry();
+    this.tableRegistry = new MemoryTableRegistry();
+    this.tableStore = new MemoryTableStore();
+    this.wal = new MemoryWAL();
 
-    const eventBus: EventBus = {
-      onExecutionCreated: e => this.events.push({ type: 'created', ...e }),
-      onExecutionStarted: e => this.events.push({ type: 'started', ...e }),
-      onStepStarted: e => this.events.push({ type: 'step.started', ...e }),
-      onStepCompleted: e => this.events.push({ type: 'step.completed', ...e }),
-      onExecutionCompleted: e => this.events.push({ type: 'completed', ...e }),
-      onExecutionFailed: e => this.events.push({ type: 'failed', ...e }),
-      onExecutionWaiting: e => this.events.push({ type: 'waiting', ...e }),
-    };
-
-    this.engine = new Engine(this.store, this.handlers, this.flows, eventBus, {
-      recordHistory: options.recordHistory ?? true,
-      maxSteps: options.maxSteps ?? 100,
+    // EventDispatcher in sync mode — events fire inline for deterministic testing.
+    // Wildcard listener populates this.events[] for backward compatibility.
+    this.dispatcher = new EventDispatcher({ mode: 'sync' });
+    this.dispatcher.on('*', (e) => {
+      this.events.push({ ...e });
     });
 
-    options.handlers?.forEach(h => this.handlers.register(h));
-    options.flows?.forEach(f => this.flows.register(f));
+    // Wrap stores/registries so all mutations emit events
+    this._eventEmittingTableStore = new EventEmittingTableStore(this.tableStore, this.dispatcher);
+    this._eventEmittingTableRegistry = new EventEmittingTableRegistry(this.tableRegistry, this.dispatcher);
+    this._eventEmittingWAL = new EventEmittingWAL(this.wal, this.dispatcher);
+    const eventEmittingFlows = new EventEmittingFlowRegistry(this.flows, this.dispatcher);
+    const eventEmittingHandlers = new EventEmittingHandlerRegistry(this.handlers, this.dispatcher);
+
+    const enableTables = options.enableTables || (options.tables && options.tables.length > 0);
+
+    this.engine = new Engine(this.store, eventEmittingHandlers, eventEmittingFlows, this.dispatcher, {
+      recordHistory: options.recordHistory ?? true,
+      maxSteps: options.maxSteps ?? 100,
+      ...(enableTables ? {
+        tableStore: this._eventEmittingTableStore,
+        tableRegistry: this._eventEmittingTableRegistry,
+        pipeWAL: this._eventEmittingWAL,
+      } : {}),
+    });
+
+    options.handlers?.forEach(h => eventEmittingHandlers.register(h));
+    options.flows?.forEach(f => eventEmittingFlows.register(f));
+
+    // Pre-register tables
+    if (options.tables) {
+      for (const table of options.tables) {
+        // Synchronous-safe: MemoryTableRegistry.create is async but instant
+        this.tableRegistry.create(table);
+      }
+    }
   }
 
   /** Run a flow to completion */
@@ -112,6 +155,9 @@ export class TestHarness {
   /** Reset all state */
   reset() {
     this.store.clear();
+    this.tableRegistry.clear();
+    this.tableStore.clear();
+    this.wal.clear();
     this.events.length = 0;
   }
 

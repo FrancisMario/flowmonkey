@@ -162,6 +162,52 @@ CREATE INDEX IF NOT EXISTS idx_fm_tokens_status ON fm_resume_tokens(status) WHER
 CREATE INDEX IF NOT EXISTS idx_fm_tokens_expires ON fm_resume_tokens(expires_at) WHERE status = 'active' AND expires_at IS NOT NULL;
 
 -- ============================================
+-- DataStore Tables
+-- ============================================
+
+-- Table definitions (schema metadata for user-created tables)
+CREATE TABLE IF NOT EXISTS fm_table_defs (
+  id          TEXT PRIMARY KEY,
+  columns     JSONB NOT NULL DEFAULT '[]',
+  created_at  BIGINT NOT NULL,
+  updated_at  BIGINT NOT NULL
+);
+
+-- Table rows (shared storage — all tables in one PG table)
+CREATE TABLE IF NOT EXISTS fm_table_rows (
+  id          TEXT PRIMARY KEY,
+  table_id    TEXT NOT NULL,
+  tenant_id   TEXT,
+  data        JSONB NOT NULL DEFAULT '{}',
+  created_at  BIGINT NOT NULL,
+  updated_at  BIGINT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_fm_rows_table ON fm_table_rows(table_id);
+CREATE INDEX IF NOT EXISTS idx_fm_rows_tenant ON fm_table_rows(table_id, tenant_id) WHERE tenant_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_fm_rows_data ON fm_table_rows USING GIN (data);
+CREATE INDEX IF NOT EXISTS idx_fm_rows_created ON fm_table_rows(table_id, created_at DESC);
+
+-- Write-ahead log (failed pipe writes for retry)
+CREATE TABLE IF NOT EXISTS fm_wal_entries (
+  id            TEXT PRIMARY KEY,
+  table_id      TEXT NOT NULL,
+  tenant_id     TEXT,
+  data          JSONB NOT NULL DEFAULT '{}',
+  pipe_id       TEXT NOT NULL,
+  execution_id  TEXT NOT NULL,
+  flow_id       TEXT NOT NULL,
+  step_id       TEXT NOT NULL,
+  error         TEXT NOT NULL,
+  attempts      INTEGER NOT NULL DEFAULT 0,
+  created_at    BIGINT NOT NULL,
+  acked         BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE INDEX IF NOT EXISTS idx_fm_wal_pending ON fm_wal_entries(created_at ASC) WHERE acked = FALSE;
+CREATE INDEX IF NOT EXISTS idx_fm_wal_exec ON fm_wal_entries(execution_id);
+
+-- ============================================
 -- Cleanup Functions
 -- ============================================
 
@@ -288,9 +334,58 @@ ALTER TABLE fm_flows ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'published';
 ALTER TABLE fm_flows ADD COLUMN IF NOT EXISTS tags JSONB;
 ALTER TABLE fm_flows ADD COLUMN IF NOT EXISTS visual JSONB;
 
--- Add status constraint (do it in two steps to avoid issues)
 -- Note: status check constraint should be added manually if needed
 CREATE INDEX IF NOT EXISTS idx_fm_flows_status ON fm_flows(status);
+`;
+
+/**
+ * Migration script for v0.4.0 - DataStore tables (table defs, rows, WAL)
+ */
+export const migrationV040 = `
+-- Table definitions (schema metadata)
+CREATE TABLE IF NOT EXISTS fm_table_defs (
+  id          TEXT PRIMARY KEY,
+  columns     JSONB NOT NULL DEFAULT '[]',
+  created_at  BIGINT NOT NULL,
+  updated_at  BIGINT NOT NULL
+);
+
+-- Table rows (shared storage — all tables in one PG table)
+CREATE TABLE IF NOT EXISTS fm_table_rows (
+  id          TEXT PRIMARY KEY,
+  table_id    TEXT NOT NULL,
+  tenant_id   TEXT,
+  data        JSONB NOT NULL DEFAULT '{}',
+  created_at  BIGINT NOT NULL,
+  updated_at  BIGINT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_fm_rows_table ON fm_table_rows(table_id);
+CREATE INDEX IF NOT EXISTS idx_fm_rows_tenant ON fm_table_rows(table_id, tenant_id) WHERE tenant_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_fm_rows_data ON fm_table_rows USING GIN (data);
+CREATE INDEX IF NOT EXISTS idx_fm_rows_created ON fm_table_rows(table_id, created_at DESC);
+
+-- Write-ahead log (failed pipe writes for retry)
+CREATE TABLE IF NOT EXISTS fm_wal_entries (
+  id            TEXT PRIMARY KEY,
+  table_id      TEXT NOT NULL,
+  tenant_id     TEXT,
+  data          JSONB NOT NULL DEFAULT '{}',
+  pipe_id       TEXT NOT NULL,
+  execution_id  TEXT NOT NULL,
+  flow_id       TEXT NOT NULL,
+  step_id       TEXT NOT NULL,
+  error         TEXT NOT NULL,
+  attempts      INTEGER NOT NULL DEFAULT 0,
+  created_at    BIGINT NOT NULL,
+  acked         BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE INDEX IF NOT EXISTS idx_fm_wal_pending ON fm_wal_entries(created_at ASC) WHERE acked = FALSE;
+CREATE INDEX IF NOT EXISTS idx_fm_wal_exec ON fm_wal_entries(execution_id);
+
+-- Add retry_attempts column to executions for step retry tracking
+ALTER TABLE fm_executions ADD COLUMN IF NOT EXISTS retry_attempts JSONB;
 `;
 
 /**
@@ -319,4 +414,11 @@ export async function applyMigrationV020(pool: Pool): Promise<void> {
  */
 export async function applyMigrationV030(pool: Pool): Promise<void> {
   await pool.query(migrationV030);
+}
+
+/**
+ * Apply migration for v0.4.0 (DataStore: table defs, rows, WAL, retry_attempts)
+ */
+export async function applyMigrationV040(pool: Pool): Promise<void> {
+  await pool.query(migrationV040);
 }

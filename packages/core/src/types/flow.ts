@@ -49,6 +49,27 @@ export interface Flow {
 
   /** Tags for organization/filtering */
   readonly tags?: string[];
+
+  /** Pipes: silent taps on step outputs that route data into tables */
+  readonly pipes?: import('./table').PipeDef[];
+}
+
+/**
+ * Retry configuration for a step.
+ * When a step fails and retry is configured, the engine re-executes it
+ * instead of following the onFailure transition.
+ */
+export interface RetryConfig {
+  /** Max retry attempts (does not count the initial attempt) */
+  readonly maxAttempts: number;
+  /** Base backoff delay in ms (default: 0 — immediate retry) */
+  readonly backoffMs?: number;
+  /** Backoff multiplier (default: 2 — exponential) */
+  readonly backoffMultiplier?: number;
+  /** Max backoff cap in ms (default: 60000) */
+  readonly maxBackoffMs?: number;
+  /** Only retry these error codes (if omitted, retries all failures) */
+  readonly retryOn?: string[];
 }
 
 /**
@@ -75,6 +96,9 @@ export interface Step {
 
   /** Optional display name */
   readonly name?: string;
+
+  /** Retry configuration for automatic retries on failure */
+  readonly retry?: RetryConfig;
 }
 
 /**

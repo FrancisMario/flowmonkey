@@ -58,6 +58,31 @@ export { batchProcessHandler } from './batch-process';
 export { llmHandler, webhookHandler } from './handlers';
 
 // ────────────────────────────────────────────────────────────────────────────
+// DataStore handlers
+// ────────────────────────────────────────────────────────────────────────────
+
+export { tableInsertHandler, type TableInsertConfig } from './table-insert';
+
+// ────────────────────────────────────────────────────────────────────────────
+// Control flow handlers
+// ────────────────────────────────────────────────────────────────────────────
+
+export {
+  conditionalHandler,
+  switchHandler,
+  type ConditionOp,
+  type Condition,
+  type ConditionalConfig,
+  type SwitchConfig,
+} from './conditional';
+
+export {
+  createSubFlowHandler,
+  type SubFlowConfig,
+  type SubFlowEngine,
+} from './sub-flow';
+
+// ────────────────────────────────────────────────────────────────────────────
 // Test utilities
 // ────────────────────────────────────────────────────────────────────────────
 

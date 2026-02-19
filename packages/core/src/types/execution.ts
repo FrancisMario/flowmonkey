@@ -94,6 +94,9 @@ export interface Execution {
 
   /** Timeout configuration for this execution */
   timeoutConfig?: TimeoutConfig;
+
+  /** Tracks retry attempts per step (stepId → attempt count) */
+  retryAttempts?: Record<string, number>;
 }
 
 export type ExecutionStatus =

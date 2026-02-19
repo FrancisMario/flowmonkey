@@ -559,11 +559,11 @@ describe('Engine', () => {
       const { events } = await t.run('simple', { message: 'test' });
 
       const types = events.map(e => e.type);
-      expect(types).toContain('created');
-      expect(types).toContain('started');
+      expect(types).toContain('execution.created');
+      expect(types).toContain('execution.started');
       expect(types).toContain('step.started');
       expect(types).toContain('step.completed');
-      expect(types).toContain('completed');
+      expect(types).toContain('execution.completed');
     });
 
     it('emits waiting event', async () => {
@@ -571,7 +571,7 @@ describe('Engine', () => {
       await t.tick(e.id); // echo
       await t.tick(e.id); // delay → waiting
 
-      const waitEvent = t.events.find(ev => ev.type === 'waiting');
+      const waitEvent = t.events.find(ev => ev.type === 'execution.waiting');
       expect(waitEvent).toBeDefined();
       expect(waitEvent.executionId).toBe(e.id);
     });
@@ -595,7 +595,7 @@ describe('Engine', () => {
 
       await t.run('fail-only-2', {});
 
-      const failEvent = t.events.find(ev => ev.type === 'failed');
+      const failEvent = t.events.find(ev => ev.type === 'execution.failed');
       expect(failEvent).toBeDefined();
       expect(failEvent.error).toBeDefined();
     });
